@@ -1,0 +1,161 @@
+import { GameNote, SoundedEvent } from '../judgements';
+import { AudioPreloader } from './AudioPreloader';
+
+/**
+ * 이진 탐색 헬퍼 함수들
+ * - lowerBound: 정렬된 notes에서, note.time >= targetTime 인 첫 위치를 찾는다.
+ * - upperBound: 정렬된 notes에서, note.time >  targetTime 인 첫 위치를 찾는다.
+ *   (upperBound - 1)이 targetTime 이하인 마지막 위치가 됨.
+ */
+function lowerBound<T extends GameNote | SoundedEvent>(notes: T[], targetTime: number): number {
+    let left = 0;
+    let right = notes.length; // right는 '배열 끝 + 1'을 가리키는 느낌
+
+    while (left < right) {
+        const mid = (left + right) >>> 1;
+        if (notes[mid].time < targetTime) {
+            // 목표보다 작으면, 범위를 오른쪽으로 좁힘
+            left = mid + 1;
+        } else {
+            // notes[mid].time >= targetTime
+            right = mid;
+        }
+    }
+    return left;
+}
+
+/**************************************
+ * 4) createClosestNoteFinder
+ *    - 한 번만 노트 배열을 time 기준으로 정렬
+ *    - getClosestNote로 "가장 가까운 노트 한 개" 반환
+ **************************************/
+export function createClosestNoteFinder<T extends GameNote | SoundedEvent>(originalNotes: T[]) {
+    // time 기준으로 정렬 (처음 한 번만)
+    const notes = [...originalNotes].sort((a, b) => a.time - b.time);
+
+    return {
+        /**
+         * getClosestNotes
+         * - currentTime과 tolerance를 기준으로 가장 가까운 노트들을 반환
+         * - 이미 사용된 노트는 건너뛴다.
+         */
+        getClosestNotes(currentTime: number, tolerance = 0.02): T[] {
+            // 사용되지 않은 노트만 대상으로 함
+            const availableNotes = notes.filter((n) => !n.used);
+
+            // lowerBound를 활용해 범위 내 노트를 찾음
+            const lowerIdx = lowerBound(availableNotes, currentTime - tolerance);
+            const upperIdx = lowerBound(availableNotes, currentTime + tolerance);
+
+            // tolerance 범위 내의 노트를 반환
+            return availableNotes.slice(lowerIdx, upperIdx).filter((note) => {
+                const diff = Math.abs(note.time - currentTime);
+                return diff <= tolerance;
+            });
+        },
+
+        /**
+         * markNoteAsUsed
+         * - 특정 노트를 사용된 것으로 표시
+         */
+        markNoteAsUsed(note: T) {
+            note.used = true; // 동적으로 플래그 추가
+        },
+
+        markGetNoteAsUsed(note: T) {
+            note.get = true; // 동적으로 플래그 추가
+        },
+
+        /**
+         * resetUsedNotes
+         * - 모든 노트의 사용 상태를 초기화
+         */
+        resetUsedNotes() {
+            notes.forEach((n) => {
+                n.used = undefined; // 플래그 제거
+            });
+        },
+    };
+}
+
+export class PlayerAudio {
+    private _preloader: AudioPreloader;
+    private _notes: {
+        getClosestNotes(currentTime: number, tolerance?: number): GameNote[] | null;
+        markNoteAsUsed(note: GameNote): void;
+        markGetNoteAsUsed(note: GameNote): void;
+        resetUsedNotes(): void;
+    };
+    private _autos: {
+        getClosestNotes(currentTime: number, tolerance?: number): SoundedEvent[] | null;
+        markNoteAsUsed(note: SoundedEvent): void;
+        markGetNoteAsUsed(note: SoundedEvent): void;
+        resetUsedNotes(): void;
+    };
+    constructor(notes: GameNote[], autos: SoundedEvent[], preloader: AudioPreloader) {
+        this._notes = createClosestNoteFinder<GameNote>(notes);
+        this._autos = createClosestNoteFinder<SoundedEvent>(autos);
+
+        this._preloader = preloader;
+
+        console.log('[PlayerAudio] notes Finder:', this._notes);
+        console.log('[PlayerAudio] autos Finder:', this._autos);
+    }
+
+    /**
+     * playAutoKeySound
+     * - matchedNote에 사용 플래그를 추가
+     * - 동기 버전(playAudioSync)을 사용하여 지연 최소화
+     */
+    playAutoKeySound(currentTime: number) {
+        const matchedNotes = this._autos.getClosestNotes(currentTime, 0.018); // 여러 개의 노트 반환
+
+        // 반환된 모든 노트 처리
+        if (matchedNotes && matchedNotes.length > 0) {
+            for (const matchedNote of matchedNotes) {
+                if (matchedNote.used !== true) {
+                    this._preloader.playAudioSync(matchedNote.keysound.toLowerCase());
+                    this._autos.markNoteAsUsed(matchedNote);
+                }
+            }
+        }
+    }
+
+    playAutoNoteKeySound(currentTime: number) {
+        const matchedNotes = this._notes.getClosestNotes(currentTime, 0.018); // 여러 개의 노트 반환
+        // 반환된 모든 노트 처리
+        if (matchedNotes && matchedNotes.length > 0) {
+            for (const matchedNote of matchedNotes) {
+                if (matchedNote.used !== true) {
+                    this._preloader.playAudioSync(matchedNote.keysound.toLowerCase());
+                    this._notes.markNoteAsUsed(matchedNote);
+                }
+            }
+        }
+    }
+
+    getCurrentNote(currentTime: number) {
+        const matchedNotes = this._notes.getClosestNotes(currentTime, 0.2); // 여러 개의 노트 반환
+        const notes: GameNote[] = [];
+        // 반환된 모든 노트 처리
+        if (matchedNotes && matchedNotes.length > 0) {
+            matchedNotes.forEach((matchedNote) => {
+                if (matchedNote.get !== true) {
+                    notes.push(matchedNote);
+                    this._notes.markGetNoteAsUsed(matchedNote);
+                }
+            });
+            return notes;
+        }
+        return [];
+    }
+
+    /**
+     * resetUsedNotes
+     * - 모든 노트의 사용 상태를 초기화
+     */
+    resetUsedNotes() {
+        this._notes.resetUsedNotes();
+        this._autos.resetUsedNotes();
+    }
+}
