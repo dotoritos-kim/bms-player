@@ -23,39 +23,51 @@
       "require": "./dist/audio/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "vite build && tsc --emitDeclarationOnly --outDir dist",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "peerDependencies": {
+    "@react-three/fiber": ">=8.0.0",
+    "@rhythm-archive/bms-core": ">=0.1.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "three": ">=0.150.0",
-    "@react-three/fiber": ">=8.0.0",
-    "zustand": ">=4.0.0",
-    "@rhythm-archive/bms-core": ">=0.1.0"
+    "zustand": ">=4.0.0"
   },
   "dependencies": {
-    "lodash": "^4.17.21",
-    "@epic-web/invariant": "^1.0.0"
+    "@epic-web/invariant": "^1.0.0",
+    "lodash": "^4.17.21"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
-    "vite": "^6.0.5",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "three": "^0.170.0",
-    "@react-three/fiber": "^9.5.0",
     "@react-three/drei": "^9.0.0",
-    "zustand": "^5.0.2",
+    "@react-three/fiber": "^9.5.0",
+    "@rhythm-archive/bms-core": "file:../bms-core",
+    "@types/lodash": "^4.17.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.170.0",
-    "@types/lodash": "^4.17.0",
-    "@rhythm-archive/bms-core": "file:../bms-core"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.170.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "vitest": "^4.1.0",
+    "zustand": "^5.0.2"
   },
-  "keywords": ["bms", "rhythm-game", "iidx", "three.js", "webgl", "game-engine"],
+  "keywords": [
+    "bms",
+    "rhythm-game",
+    "iidx",
+    "three.js",
+    "webgl",
+    "game-engine"
+  ],
   "license": "MIT"
 }
