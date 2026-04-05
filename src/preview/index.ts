@@ -10,6 +10,7 @@ export type {
     BmsPreviewOptions,
     BmsPreviewState,
     BmsPreviewControls,
+    BmsPreviewResolveConfig,
 } from './useBmsPreview';
 
 export { BmsPreviewPlayer } from './BmsPreviewPlayer';

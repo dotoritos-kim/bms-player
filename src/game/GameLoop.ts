@@ -43,6 +43,8 @@ export interface GameLoopConfig {
   judgmentOffset?: number;
   /** 비주얼 레이턴시 보정 (ms) - 양수: 노트를 일찍 표시 */
   visualOffset?: number;
+  /** 오토플레이 모드 */
+  autoplay?: boolean;
 }
 
 export interface GameLoopState {
@@ -142,6 +144,7 @@ export class GameLoop {
   private _isFailed: boolean = false;
   private _isCompleted: boolean = false;
   private animationFrameId: number = 0;
+  private firstTickDone: boolean = false;
 
   // 노트 추적
   private pendingNotes: GameNote[];      // 아직 판정되지 않은 노트
@@ -149,6 +152,9 @@ export class GameLoop {
   private activeHolds: Map<KeyColumn, GameNote>; // 진행 중인 롱노트
   private autoIndex: number = 0;         // 다음 자동 재생할 BGM 인덱스
   private sortedAutos: SoundedEvent[];   // 시간순 정렬된 자동 사운드
+
+  // 오토플레이
+  private _autoplay: boolean = false;
 
   // 마지막 상태 (렌더링 최적화)
   private lastUpdateTime: number = 0;
@@ -216,6 +222,9 @@ export class GameLoop {
     // 스코어
     this.score = new ScoreManager({ totalNotes });
 
+    // 오토플레이 모드
+    this._autoplay = config.autoplay ?? false;
+
     // 노트 준비 (시간순 정렬, NaN 시간 필터링)
     this.pendingNotes = [...notes]
       .filter((note) => !isNaN(note.time) && isFinite(note.time))
@@ -264,6 +273,7 @@ export class GameLoop {
     this.contextStartTime = this.audioContext.currentTime;
     this.autoIndex = 0;
     this.lastUpdateTime = 0;
+    this.firstTickDone = false;
 
     // 입력 활성화
     this.inputHandler.setEnabled(true);
@@ -340,8 +350,10 @@ export class GameLoop {
 
     // 첫 프레임에서 contextStartTime 재설정 (타이밍 점프 방지)
     // AudioContext.resume() async 완료와 tick() 호출 사이의 시간 차이를 보정
-    if (this.lastUpdateTime === 0) {
+    // 주의: boolean 플래그 사용 — lastUpdateTime === 0 체크 시 매 프레임 리셋되는 버그 방지
+    if (!this.firstTickDone) {
       this.contextStartTime = this.audioContext.currentTime;
+      this.firstTickDone = true;
     }
 
     const currentTime = this.getCurrentTime();
@@ -349,22 +361,27 @@ export class GameLoop {
     // 1. 자동 BGM 재생
     this.processAutoSounds(currentTime);
 
-    // 2. 미스 체크 (판정 창을 벗어난 노트)
+    // 2. 오토플레이: 노트를 자동 판정
+    if (this._autoplay) {
+      this.processAutoplayNotes(currentTime);
+    }
+
+    // 3. 미스 체크 (판정 창을 벗어난 노트 — 오토플레이 시에는 이미 처리됨)
     this.checkMissedNotes(currentTime);
 
-    // 3. 롱노트 홀드 체크
+    // 4. 롱노트 홀드 체크
     this.checkActiveHolds(currentTime);
 
-    // 3.5. 지나간 지뢰 노트 정리
+    // 5. 지나간 지뢰 노트 정리
     this.cleanupPassedLandmines(currentTime);
 
-    // 4. 상태 업데이트 콜백 (프레임 제한)
+    // 6. 상태 업데이트 콜백 (프레임 제한)
     if (currentTime - this.lastUpdateTime >= this.UPDATE_INTERVAL) {
       this.emitUpdate(currentTime);
       this.lastUpdateTime = currentTime;
     }
 
-    // 5. 완료 체크
+    // 7. 완료 체크
     if (this.pendingNotes.length === 0 && this.activeHolds.size === 0) {
       // 모든 자동 사운드가 재생될 때까지 대기
       if (this.autoIndex >= this.sortedAutos.length) {
@@ -386,23 +403,68 @@ export class GameLoop {
   /**
    * 자동 BGM 재생
    * 오디오 레이턴시 보정: 양수면 오디오가 늦게 들리므로 일찍 재생
+   * lookahead 스케줄링: 50ms 앞의 사운드를 미리 AudioWorklet에 전달하여
+   * 샘플 단위 정확한 타이밍으로 재생
    */
   private processAutoSounds(currentTime: number): void {
     // 오디오 레이턴시 보정 적용 (양수면 일찍 재생)
     const adjustedTime = currentTime + this.audioLatency;
     const timeInSeconds = adjustedTime / 1000;
+    // rAF 간격(~17ms)보다 넉넉한 lookahead로 사운드 사전 스케줄링
+    const LOOKAHEAD = 0.050; // 50ms
 
     while (this.autoIndex < this.sortedAutos.length) {
       const auto = this.sortedAutos[this.autoIndex];
-      if (auto.time > timeInSeconds) break;
+      if (auto.time > timeInSeconds + LOOKAHEAD) break;
 
       // 키사운드 재생
       if (auto.keysound) {
         const offset = auto.keysoundStart ?? 0;
-        this.keysoundPlayer.play(auto.keysound, offset);
+        // AudioContext 시간 기준으로 정확한 재생 시점 계산
+        // getCurrentTime() = ((acTime - csTime) * 1000 + startOffset) * playbackRate
+        // → acTime = csTime + (gameTimeMs / playbackRate - startOffset) / 1000
+        const gameTimeMs = auto.time * 1000;
+        const targetContextTime = this.contextStartTime +
+          (gameTimeMs / this.playbackRate - this.startOffset) / 1000;
+        this.keysoundPlayer.play(auto.keysound, offset, targetContextTime, auto.volume);
       }
 
       this.autoIndex++;
+    }
+  }
+
+  /**
+   * 오토플레이: 노트 시간에 도달하면 자동으로 PGREAT 판정
+   */
+  private processAutoplayNotes(currentTime: number): void {
+    while (this.pendingNotes.length > 0) {
+      const note = this.pendingNotes[0];
+      const noteTimeMs = note.time * 1000;
+
+      // 아직 노트 시간에 도달하지 않은 경우 중단
+      if (currentTime < noteTimeMs) break;
+
+      this.pendingNotes.shift();
+
+      // 키사운드 재생
+      if (note.keysound) {
+        this.keysoundPlayer.play(note.keysound, note.keysoundStart ?? 0, 0, note.volume);
+      }
+
+      // 키 입력 시각 효과 콜백
+      this.callbacks.onKeyInput?.(note.column as KeyColumn, true);
+      // 짧은 딜레이 후 키 릴리즈 (시각적 피드백용)
+      setTimeout(() => {
+        this.callbacks.onKeyInput?.(note.column as KeyColumn, false);
+      }, 50);
+
+      // 롱노트는 활성화 (끝점은 checkActiveHolds에서 자동 처리)
+      if (note.end) {
+        this.activeHolds.set(note.column as KeyColumn, note);
+      }
+
+      // PGREAT 판정 (오프셋 0)
+      this.onNoteJudgment(note, 'PGREAT', 0);
     }
   }
 
@@ -421,8 +483,11 @@ export class GameLoop {
         break;
       }
 
-      // 미스 처리
+      // 미스 처리 - BMS 표준: 미스된 노트의 키음도 자동 재생
       this.pendingNotes.shift();
+      if (note.keysound) {
+        this.keysoundPlayer.play(note.keysound, note.keysoundStart ?? 0, 0, note.volume);
+      }
       this.onNoteJudgment(note, 'MISS', 0);
 
       // 롱노트인 경우 끝점도 미스
@@ -442,8 +507,8 @@ export class GameLoop {
     for (const [column, note] of this.activeHolds) {
       if (!note.end) continue;
 
-      // 키를 떼고 있으면 POOR
-      if (!this.inputHandler.isHeld(column)) {
+      // 오토플레이가 아닌 경우: 키를 떼고 있으면 POOR
+      if (!this._autoplay && !this.inputHandler.isHeld(column)) {
         this.activeHolds.delete(column);
         this.onNoteJudgment(note, 'POOR', 0);
         continue;
@@ -462,7 +527,7 @@ export class GameLoop {
    * 키다운 핸들러
    */
   private handleKeyDown = (input: KeyInput): void => {
-    if (!this._isPlaying || this._isPaused) return;
+    if (!this._isPlaying || this._isPaused || this._autoplay) return;
 
     const { column } = input;
 
@@ -489,9 +554,9 @@ export class GameLoop {
     // 노트 제거
     this.pendingNotes.splice(noteIndex, 1);
 
-    // 키사운드 재생
+    // 키사운드 재생 (볼륨 적용)
     if (note.keysound) {
-      this.keysoundPlayer.play(note.keysound, note.keysoundStart ?? 0);
+      this.keysoundPlayer.play(note.keysound, note.keysoundStart ?? 0, 0, note.volume);
     }
 
     // 롱노트 시작이면 활성화
@@ -513,7 +578,7 @@ export class GameLoop {
    * 키업 핸들러
    */
   private handleKeyUp = (input: KeyInput): void => {
-    if (!this._isPlaying || this._isPaused) return;
+    if (!this._isPlaying || this._isPaused || this._autoplay) return;
 
     const { column } = input;
 

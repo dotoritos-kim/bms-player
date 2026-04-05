@@ -43,10 +43,14 @@ export interface GamePlayerOptions {
   visualOffset?: number;
   /** 자동 시작 */
   autoStart?: boolean;
+  /** 오토플레이 모드 */
+  autoplay?: boolean;
   /** 커스텀 키 바인딩 */
   keyBindings?: KeyBindings;
   /** 플레이 사이드 (1P, 2P, DP) */
   playSide?: '1P' | '2P' | 'DP';
+  /** 플로팅 하이스피드 (BPM 변속 시 Green Number 유지) */
+  floatingHiSpeed?: boolean;
 }
 
 export interface GamePlayerState {
@@ -105,6 +109,7 @@ export interface UseGamePlayerResult {
     hiSpeed: number;
     heldKeys: Set<KeyColumn>;
     lastJudgmentEvent: JudgmentEvent | null;
+    judgmentQueue: JudgmentEvent[];
     triggeredMineIds: Set<number>;
   };
 }
@@ -146,6 +151,7 @@ export function useGamePlayer(
   });
   const [heldKeys, setHeldKeys] = useState<Set<KeyColumn>>(new Set());
   const [lastJudgment, setLastJudgment] = useState<JudgmentEvent | null>(null);
+  const [judgmentQueue, setJudgmentQueue] = useState<JudgmentEvent[]>([]);
   const [finalScore, setFinalScore] = useState<ScoreState | null>(null);
   const [hiSpeed, setHiSpeed] = useState(options.hiSpeed ?? 1);
   const [triggeredMineIds, setTriggeredMineIds] = useState<Set<number>>(new Set());
@@ -209,6 +215,7 @@ export function useGamePlayer(
     },
     onJudgment: (event) => {
       setLastJudgment(event);
+      setJudgmentQueue(prev => [...prev, event]);
     },
     onLandmineTrigger: (event: LandmineEvent) => {
       setTriggeredMineIds((prev) => {
@@ -267,6 +274,7 @@ export function useGamePlayer(
         playbackRate: opts.playbackRate ?? 1,
         judgmentOffset: opts.judgmentOffset ?? 0,
         visualOffset: opts.visualOffset ?? 0,
+        autoplay: opts.autoplay ?? false,
       },
       callbacks
     );
@@ -288,6 +296,7 @@ export function useGamePlayer(
     gameLoopRef.current = gameLoop;
     setFinalScore(null);
     setLastJudgment(null);
+    setJudgmentQueue([]);
     setTriggeredMineIds(new Set());
     gameLoop.start();
   }, [isReady, createGameLoop]);
@@ -361,8 +370,9 @@ export function useGamePlayer(
     hiSpeed,
     heldKeys,
     lastJudgmentEvent: lastJudgment,
+    judgmentQueue,
     triggeredMineIds,
-  }), [notechart, gameState, hiSpeed, heldKeys, lastJudgment, triggeredMineIds]);
+  }), [notechart, gameState, hiSpeed, heldKeys, lastJudgment, judgmentQueue, triggeredMineIds]);
 
   return { state, actions, canvasProps };
 }

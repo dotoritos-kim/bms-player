@@ -235,6 +235,14 @@ export const LANE_CONFIG_48K_SC: LaneConfig[] = [
   { column: 'SC2', width: 30, color: '#ff3366', pressedColor: '#ff6699' },
 ];
 
+// 12K (6K DP) 레인 설정
+export const LANE_CONFIG_12K: LaneConfig[] = Array.from({ length: 12 }, (_, i) => ({
+  column: String(i + 1),
+  width: 28,
+  color: ['#ff6b6b', '#4ecdc4', '#ffe66d', '#ffe66d', '#4ecdc4', '#ff6b6b'][i % 6],
+  pressedColor: ['#ff9999', '#88ddd4', '#fff099', '#fff099', '#88ddd4', '#ff9999'][i % 6],
+}));
+
 // 키 모드에 따른 레인 설정 맵
 export const LANE_CONFIG_MAP: Record<string, LaneConfig[]> = {
   '4K': LANE_CONFIG_4K,
@@ -244,6 +252,7 @@ export const LANE_CONFIG_MAP: Record<string, LaneConfig[]> = {
   '8K': LANE_CONFIG_8K,
   '9K': LANE_CONFIG_9K,
   '10K': LANE_CONFIG_10K,
+  '12K': LANE_CONFIG_12K,
   '14K': LANE_CONFIG_14K,
   '18K': LANE_CONFIG_18K,
   '24K': LANE_CONFIG_24K,
@@ -321,6 +330,8 @@ export interface GameCanvasProps {
   heldKeys?: Set<KeyColumn>;
   /** 판정 이벤트 (이펙트 표시용) */
   lastJudgmentEvent?: JudgmentEvent | null;
+  /** 판정 이벤트 큐 (동시 판정 지원) */
+  judgmentQueue?: JudgmentEvent[];
   /** 캔버스 너비 */
   width?: number;
   /** 캔버스 높이 */
@@ -460,15 +471,9 @@ const NotesRenderer: React.FC<{
   noteScale: number;
 }> = React.memo(({ notes, currentPosition, hiSpeed, judgedNoteIds, lanePositions, laneColorMap, noteScale }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const colorInitialized = useRef(false);
-
-  // 프레임 간 비교를 위한 ref (불필요한 업데이트 방지)
-  const lastPositionRef = useRef(currentPosition);
-  const lastJudgedCountRef = useRef(judgedNoteIds.size);
-
   // 초기 색상 버퍼 설정 (한 번만)
   useEffect(() => {
-    if (!meshRef.current || colorInitialized.current) return;
+    if (!meshRef.current) return;
     const mesh = meshRef.current;
     _color.setHex(DEFAULT_COLOR);
     for (let i = 0; i < MAX_VISIBLE_NOTES; i++) {
@@ -477,7 +482,6 @@ const NotesRenderer: React.FC<{
     if (mesh.instanceColor) {
       mesh.instanceColor.needsUpdate = true;
     }
-    colorInitialized.current = true;
   }, []);
 
   // useFrame으로 매 프레임 인스턴스 업데이트 (React 리렌더 없음)
@@ -509,28 +513,19 @@ const NotesRenderer: React.FC<{
       _dummy.updateMatrix();
       mesh.setMatrixAt(count, _dummy.matrix);
 
-      // 색상은 판정 시에만 변경되므로 조건부 업데이트
-      if (lastJudgedCountRef.current !== judgedNoteIds.size) {
-        const colorHex = laneColorMap.get(column) ?? DEFAULT_COLOR;
-        _color.setHex(colorHex);
-        mesh.setColorAt(count, _color);
-      }
+      // 인스턴스 인덱스 ↔ 노트 매핑이 매 프레임 변하므로 항상 색상 설정
+      const colorHex = laneColorMap.get(column) ?? DEFAULT_COLOR;
+      _color.setHex(colorHex);
+      mesh.setColorAt(count, _color);
 
       count++;
     }
 
     mesh.count = count;
     mesh.instanceMatrix.needsUpdate = true;
-
-    // 판정 수가 변경된 경우에만 색상 업데이트
-    if (lastJudgedCountRef.current !== judgedNoteIds.size) {
-      if (mesh.instanceColor) {
-        mesh.instanceColor.needsUpdate = true;
-      }
-      lastJudgedCountRef.current = judgedNoteIds.size;
+    if (mesh.instanceColor) {
+      mesh.instanceColor.needsUpdate = true;
     }
-
-    lastPositionRef.current = currentPosition;
   });
 
   return (
@@ -1146,6 +1141,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
       hiSpeed = 1,
       heldKeys = new Set(),
       lastJudgmentEvent = null,
+      judgmentQueue = [],
       width = 400,
       height = 700,
       suddenPlus = 0,
@@ -1195,16 +1191,27 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
       triggerHitEffect,
     }), [triggerHitEffect]);
 
-    // 판정 이벤트 처리
+    // 판정 이벤트 처리 (큐 기반 - 동시 판정 지원)
+    const processedQueueLenRef = useRef(0);
     useEffect(() => {
-      if (lastJudgmentEvent) {
-        triggerHitEffect(lastJudgmentEvent.column, lastJudgmentEvent.judgment);
-
-        // ref와 state 모두 업데이트
-        judgedNoteIdsRef.current.add(lastJudgmentEvent.noteId);
+      if (judgmentQueue.length > processedQueueLenRef.current) {
+        // 새로 추가된 이벤트만 처리
+        const newEvents = judgmentQueue.slice(processedQueueLenRef.current);
+        for (const event of newEvents) {
+          triggerHitEffect(event.column, event.judgment);
+          judgedNoteIdsRef.current.add(event.noteId);
+        }
+        processedQueueLenRef.current = judgmentQueue.length;
         setJudgedNoteIds(new Set(judgedNoteIdsRef.current));
       }
-    }, [lastJudgmentEvent, triggerHitEffect]);
+    }, [judgmentQueue, triggerHitEffect]);
+
+    // 큐 리셋 시 카운터도 리셋
+    useEffect(() => {
+      if (judgmentQueue.length === 0) {
+        processedQueueLenRef.current = 0;
+      }
+    }, [judgmentQueue.length]);
 
     // 게임 상태 리셋 감지 (새 게임 시작 시 정리)
     useEffect(() => {

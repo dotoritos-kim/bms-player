@@ -9,7 +9,18 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { BMSParser, KeySounds, Timing } from '@rhythm-archive/bms-core';
 import type { BMSNote } from '@rhythm-archive/bms-core';
-import { AudioPreloader, FileMap } from '../audio';
+import { AudioPreloader, FileMap, resolveKeysoundFiles, type ResolveOptions, type AudioFileMapFetcher } from '../audio';
+
+export interface BmsPreviewResolveConfig {
+    /** Repository slug */
+    slug: string;
+    /** Branch, tag, or commit SHA */
+    ref: string;
+    /** BMS 파일이 위치한 디렉토리 경로 */
+    dir: string;
+    /** 오디오 파일 매핑을 가져오는 fetcher */
+    fetcher: AudioFileMapFetcher;
+}
 
 export interface BmsPreviewOptions {
     /** 파일들이 위치한 기본 URL */
@@ -27,14 +38,10 @@ export interface BmsPreviewOptions {
     /**
      * Worker factory function for AudioLoader.
      * Consumers must provide this since Worker instantiation is bundler-specific.
-     * @example
-     * ```ts
-     * // Vite:
-     * import AudioLoaderWorker from '@rhythm-archive/bms-player/audio/loader/AudioLoader.worker?worker';
-     * workerFactory: () => new AudioLoaderWorker()
-     * ```
      */
     workerFactory?: () => Worker;
+    /** stem 기반 파일 해석 설정 (없으면 원본 파일명 사용) */
+    resolve?: BmsPreviewResolveConfig;
 }
 
 export interface BmsPreviewState {
@@ -94,6 +101,7 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
         onProgress,
         onError,
         workerFactory,
+        resolve: resolveConfig,
     } = options;
 
     const [state, setState] = useState<BmsPreviewState>({
@@ -238,14 +246,34 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
             }
         }
 
-        // 4. 키음 로드
+        // 4. stem 기반 파일 해석 (resolve 설정이 있는 경우)
+        let resolvedFileMap = fileMap;
+        if (resolveConfig) {
+            const resolveOptions: ResolveOptions = {
+                slug: resolveConfig.slug,
+                ref: resolveConfig.ref,
+                dir: resolveConfig.dir,
+            };
+            const { resolved } = await resolveKeysoundFiles(
+                Object.fromEntries(
+                    Object.entries(fileMap).map(([id, filename]) => [id, filename])
+                ),
+                resolveOptions,
+                resolveConfig.fetcher,
+            );
+            if (Object.keys(resolved).length > 0) {
+                resolvedFileMap = resolved;
+            }
+        }
+
+        // 5. 키음 로드
         if (!workerFactory) {
             throw new Error('workerFactory is required for BGM channel playback');
         }
         workerRef.current = workerFactory();
         preloaderRef.current = new AudioPreloader(
             baseUrl,
-            fileMap,
+            resolvedFileMap,
             workerRef.current,
             (type, payload) => {
                 if (type === 'PROGRESS') {
@@ -287,7 +315,7 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
             status: 'ready',
             mode: 'bgm-channel',
         }));
-    }, [baseUrl, bmsPath, onProgress, workerFactory]);
+    }, [baseUrl, bmsPath, onProgress, workerFactory, resolveConfig]);
 
     /**
      * 로드

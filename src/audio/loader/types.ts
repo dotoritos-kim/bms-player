@@ -34,6 +34,10 @@ export interface StereoPlayData {
     loop: boolean;
     /** 재생 시작 위치 (초 단위) - seek 시 offset 재생용 */
     offset?: number;
+    /** AudioContext 예약 시간 (0이면 즉시 재생) */
+    scheduledTime?: number;
+    /** 볼륨 (0-1) */
+    volume?: number;
 }
 
 /**
@@ -44,6 +48,10 @@ export interface MonoPlayData {
     loop: boolean;
     /** 재생 시작 위치 (초 단위) - seek 시 offset 재생용 */
     offset?: number;
+    /** AudioContext 예약 시간 (0이면 즉시 재생) */
+    scheduledTime?: number;
+    /** 볼륨 (0-1) */
+    volume?: number;
 }
 
 /**

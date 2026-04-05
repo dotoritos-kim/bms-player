@@ -44,6 +44,23 @@ export type {
     WorkerErrorPayload,
 } from './loader/types';
 
+// Resolve (keysound file resolution)
+export {
+    resolveKeysoundFiles,
+    resolveKeysounds,
+    extractStem,
+    type ResolveOptions,
+    type AudioFileMapFetcher,
+} from './loader/resolveKeysoundFiles';
+
+// KeysoundPlayer (concrete class wrapping AudioPreloader)
+export {
+    KeysoundPlayer,
+    createKeysoundPlayer,
+    type KeysoundPlayerOptions,
+    type KeysoundPlayerResolveConfig,
+} from './KeysoundPlayer';
+
 // Judgements / Notechart
 export { Notechart } from './judgements';
 export type {

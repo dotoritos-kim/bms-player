@@ -372,7 +372,31 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
   const gaugeType = options.gaugeType ?? 'groove';
   const playSide = options.playSide ?? 'DP';
 
-  const { state, actions, canvasProps } = useGamePlayer(notechart, keysoundPlayer, options);
+  // Hi-Speed state (adjustable during gameplay, syncs with external option changes)
+  const [currentHiSpeed, setCurrentHiSpeed] = useState(options.hiSpeed ?? 1);
+  const prevOptionsHiSpeed = useRef(options.hiSpeed ?? 1);
+  if ((options.hiSpeed ?? 1) !== prevOptionsHiSpeed.current) {
+    prevOptionsHiSpeed.current = options.hiSpeed ?? 1;
+    // Will take effect on next render cycle
+    setCurrentHiSpeed(options.hiSpeed ?? 1);
+  }
+  // Floating Hi-Speed (green number mode) — initialize from options
+  const [floatingHiSpeed, setFloatingHiSpeed] = useState(options.floatingHiSpeed ?? false);
+  const prevOptionsFloating = useRef(options.floatingHiSpeed ?? false);
+  if ((options.floatingHiSpeed ?? false) !== prevOptionsFloating.current) {
+    prevOptionsFloating.current = options.floatingHiSpeed ?? false;
+    setFloatingHiSpeed(options.floatingHiSpeed ?? false);
+  }
+  // Green number = visible time in ms at base BPM
+  const [greenNumber, setGreenNumber] = useState(0);
+  // Show speed info overlay (briefly after adjustment)
+  const [showSpeedInfo, setShowSpeedInfo] = useState(false);
+  const speedInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { state, actions, canvasProps } = useGamePlayer(notechart, keysoundPlayer, {
+    ...options,
+    hiSpeed: currentHiSpeed,
+  });
 
   // playSide에 따른 레인 설정 계산
   const laneConfig = useMemo(() => {
@@ -380,6 +404,62 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
     const keyMode = notechart?.getKeyMode?.('SC') || '7K';
     return getLaneConfigForSide(keyMode, playSide);
   }, [notechart, playSide]);
+
+  // Calculate green number (visible time in ms) from current BPM and hi-speed
+  // Green Number = (visible_beats / (BPM / 60)) * 1000 / hiSpeed
+  // In IIDX terms: how many ms of notes are visible on screen
+  const currentBpm = useMemo(() => {
+    if (!notechart?.bpmAtBeat) return 150;
+    const beat = canvasProps.gameState.currentBeat;
+    if (!Number.isFinite(beat) || beat < 0) return notechart.bpmAtBeat(0) || 150;
+    return notechart.bpmAtBeat(beat) || 150;
+  }, [notechart, canvasProps.gameState.currentBeat]);
+
+  const baseBpm = useMemo(() => {
+    if (!notechart?.bpmAtBeat) return 150;
+    return notechart.bpmAtBeat(0) || 150;
+  }, [notechart]);
+
+  // Update green number when hi-speed changes (but not from floating auto-adjust)
+  const greenNumberRef = useRef(greenNumber);
+  const floatingRef = useRef(floatingHiSpeed);
+  floatingRef.current = floatingHiSpeed;
+
+  // Compute initial green number from initial BPM and hi-speed
+  useEffect(() => {
+    if (!notechart) return;
+    const bpm = baseBpm;
+    // Green number = time(ms) for VISIBLE_BEATS to pass at current effective speed
+    // effectiveSpeed = BPM * hiSpeed, time = VISIBLE_BEATS / (effectiveSpeed / 60) * 1000
+    const gn = Math.round((8 * 60 * 1000) / (bpm * currentHiSpeed));
+    setGreenNumber(gn);
+    greenNumberRef.current = gn;
+  }, [notechart, baseBpm]); // Only on init / chart change
+
+  // Floating Hi-Speed: auto-adjust hiSpeed when BPM changes to maintain constant green number
+  const prevBpmRef = useRef(currentBpm);
+  useEffect(() => {
+    if (!floatingHiSpeed || !state.isPlaying) return;
+    if (prevBpmRef.current === currentBpm) return;
+    prevBpmRef.current = currentBpm;
+
+    if (greenNumberRef.current <= 0) return;
+
+    // Calculate new hi-speed to maintain same green number
+    // greenNumber = (8 * 60 * 1000) / (bpm * hiSpeed)
+    // hiSpeed = (8 * 60 * 1000) / (bpm * greenNumber)
+    const newHiSpeed = (8 * 60 * 1000) / (currentBpm * greenNumberRef.current);
+    const clamped = Math.max(0.5, Math.min(10, Math.round(newHiSpeed * 100) / 100));
+    setCurrentHiSpeed(clamped);
+    actions.setHiSpeed(clamped);
+  }, [currentBpm, floatingHiSpeed, state.isPlaying, actions]);
+
+  // Show speed info briefly
+  const flashSpeedInfo = useCallback(() => {
+    setShowSpeedInfo(true);
+    if (speedInfoTimerRef.current) clearTimeout(speedInfoTimerRef.current);
+    speedInfoTimerRef.current = setTimeout(() => setShowSpeedInfo(false), 1500);
+  }, []);
 
   // 결과 화면 표시 조건
   const showResult = state.isCompleted || state.isFailed;
@@ -447,7 +527,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
     };
   }, [state.isPlaying, state.isReady]);
 
-  // 키보드 이벤트 (ESC: 일시정지, Space: 시작, F11: 전체화면)
+  // 키보드 이벤트 (ESC: 일시정지, Space: 시작, F11: 전체화면, ↑↓: 배속)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Escape') {
@@ -465,11 +545,67 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
         e.preventDefault();
         toggleFullscreen();
       }
+      // Hi-Speed adjustment (↑/↓ or Page Up/Down)
+      // ↑↓: ±0.25 step, PageUp/PageDown: ±1.0 step
+      if (state.isPlaying && !state.isPaused) {
+        let delta = 0;
+        if (e.code === 'ArrowUp') delta = 0.25;
+        else if (e.code === 'ArrowDown') delta = -0.25;
+        else if (e.code === 'PageUp') delta = 1.0;
+        else if (e.code === 'PageDown') delta = -1.0;
+
+        if (delta !== 0) {
+          e.preventDefault();
+          setCurrentHiSpeed(prev => {
+            const next = Math.max(0.5, Math.min(10, Math.round((prev + delta) * 100) / 100));
+            actions.setHiSpeed(next);
+            // Update green number based on current BPM
+            const gn = Math.round((8 * 60 * 1000) / (currentBpm * next));
+            setGreenNumber(gn);
+            greenNumberRef.current = gn;
+            return next;
+          });
+          flashSpeedInfo();
+        }
+
+        // Toggle floating hi-speed with ` (Backquote) key — KeyF conflicts with game column 3
+        if (e.code === 'Backquote') {
+          e.preventDefault();
+          setFloatingHiSpeed(prev => !prev);
+          flashSpeedInfo();
+        }
+      }
+
+      // Ready screen: adjust speed with ↑/↓ too
+      if (state.isReady && !state.isPlaying && !showResult) {
+        let delta = 0;
+        if (e.code === 'ArrowUp') delta = 0.25;
+        else if (e.code === 'ArrowDown') delta = -0.25;
+        else if (e.code === 'PageUp') delta = 1.0;
+        else if (e.code === 'PageDown') delta = -1.0;
+
+        if (delta !== 0) {
+          e.preventDefault();
+          setCurrentHiSpeed(prev => {
+            const next = Math.max(0.5, Math.min(10, Math.round((prev + delta) * 100) / 100));
+            actions.setHiSpeed(next);
+            const gn = Math.round((8 * 60 * 1000) / (baseBpm * next));
+            setGreenNumber(gn);
+            greenNumberRef.current = gn;
+            return next;
+          });
+        }
+
+        if (e.code === 'Backquote') {
+          e.preventDefault();
+          setFloatingHiSpeed(prev => !prev);
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [state.isPlaying, state.isPaused, state.isReady, showResult, actions, toggleFullscreen]);
+  }, [state.isPlaying, state.isPaused, state.isReady, showResult, actions, toggleFullscreen, currentBpm, baseBpm, flashSpeedInfo]);
 
   // 종료 핸들러
   const handleExit = useCallback(() => {
@@ -516,6 +652,63 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
         />
       )}
 
+      {/* Speed info overlay (shown briefly after adjustment or always during play) */}
+      {state.isPlaying && !state.isPaused && showSpeedInfo && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'rgba(0, 0, 0, 0.85)',
+            border: '1px solid #555',
+            borderRadius: 8,
+            padding: '12px 24px',
+            color: '#fff',
+            fontFamily: 'monospace',
+            fontSize: 16,
+            textAlign: 'center',
+            zIndex: 20,
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ fontSize: 14, color: '#888', marginBottom: 4 }}>HI-SPEED</div>
+          <div style={{ fontSize: 28, fontWeight: 'bold', color: '#ffcc00' }}>
+            {currentHiSpeed.toFixed(2)}
+          </div>
+          <div style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>
+            BPM {Math.round(currentBpm)} × {currentHiSpeed.toFixed(2)} = {Math.round(currentBpm * currentHiSpeed)}
+          </div>
+          <div style={{ fontSize: 13, color: '#00ffcc', marginTop: 4 }}>
+            GN {greenNumber}
+          </div>
+          {floatingHiSpeed && (
+            <div style={{ fontSize: 11, color: '#ff6600', marginTop: 4 }}>
+              FLOATING ON
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Persistent speed indicator (small, always visible during play) */}
+      {state.isPlaying && !state.isPaused && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            left: 8,
+            color: '#666',
+            fontFamily: 'monospace',
+            fontSize: 10,
+            pointerEvents: 'none',
+            zIndex: 10,
+          }}
+        >
+          HS {currentHiSpeed.toFixed(2)} | GN {greenNumber}
+          {floatingHiSpeed && <span style={{ color: '#ff6600' }}> F</span>}
+        </div>
+      )}
+
       {/* 전체화면 토글 버튼 - 좌측 상단 (게임 통계 위) */}
       <button
         onClick={toggleFullscreen}
@@ -544,9 +737,82 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
       {/* 로딩 화면 */}
       {state.isLoading && <LoadingScreen />}
 
-      {/* 시작 대기 화면 */}
+      {/* 시작 대기 화면 (with speed settings) */}
       {state.isReady && !state.isPlaying && !showResult && (
-        <ReadyScreen onStart={actions.start} />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: '#fff',
+            fontFamily: 'sans-serif',
+          }}
+        >
+          <div style={{ fontSize: 32, marginBottom: 20 }}>READY</div>
+
+          {/* Speed settings */}
+          <div
+            style={{
+              background: 'rgba(30, 30, 50, 0.9)',
+              border: '1px solid #444',
+              borderRadius: 8,
+              padding: '16px 28px',
+              marginBottom: 20,
+              minWidth: 240,
+              textAlign: 'center',
+              fontFamily: 'monospace',
+            }}
+          >
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>HI-SPEED (↑↓ adjust)</div>
+            <div style={{ fontSize: 32, fontWeight: 'bold', color: '#ffcc00' }}>
+              {currentHiSpeed.toFixed(2)}
+            </div>
+            <div style={{ fontSize: 13, color: '#aaa', marginTop: 6 }}>
+              BPM {Math.round(baseBpm)} × {currentHiSpeed.toFixed(2)} = {Math.round(baseBpm * currentHiSpeed)}
+            </div>
+            <div style={{ fontSize: 14, color: '#00ffcc', marginTop: 4 }}>
+              GREEN NUMBER: {greenNumber}
+            </div>
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 12,
+                color: floatingHiSpeed ? '#ff6600' : '#555',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+              onClick={() => setFloatingHiSpeed(prev => !prev)}
+            >
+              {floatingHiSpeed ? '● FLOATING HI-SPEED ON' : '○ FLOATING HI-SPEED OFF'}
+              <span style={{ fontSize: 10, color: '#666', marginLeft: 6 }}>(` key)</span>
+            </div>
+          </div>
+
+          <button
+            onClick={actions.start}
+            style={{
+              padding: '15px 40px',
+              fontSize: 20,
+              background: '#ff6600',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              cursor: 'pointer',
+            }}
+          >
+            START
+          </button>
+          <div style={{ marginTop: 20, fontSize: 14, color: '#888' }}>
+            Press SPACE or click to start
+          </div>
+          <div style={{ marginTop: 6, fontSize: 11, color: '#555' }}>
+            ↑↓ Hi-Speed ±0.25 | PgUp/PgDn ±1.0 | ` Floating
+          </div>
+        </div>
       )}
 
       {/* 일시정지 화면 */}

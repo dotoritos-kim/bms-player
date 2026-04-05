@@ -40,79 +40,50 @@ function buildAudioUrl(baseUrl: string, fileName: string): string {
     return `${baseUrl}/${encodedFileName}`;
 }
 
-// 파일 로드 함수: 429 에러 시 지수 백오프로 재시도, 실패 시 확장자 변경 후 재요청
+// 파일 로드 함수: 429 에러 시 지수 백오프로 재시도
+// 확장자 폴백 없음 — 확장자 해석은 로드 전에 resolveKeysoundFiles로 완료되어야 함
 async function loadAudioFile(baseUrl: string, key: string, fileName: string): Promise<ArrayBuffer> {
-    const tryFetchWithRetry = async (url: string): Promise<Response> => {
-        let lastError: Error | null = null;
-        let retryDelay = INITIAL_RETRY_DELAY_MS;
+    let lastError: Error | null = null;
+    let retryDelay = INITIAL_RETRY_DELAY_MS;
+    const url = buildAudioUrl(baseUrl, fileName);
 
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                const response = await fetch(url, { cache: 'force-cache' });
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            const response = await fetch(url, { cache: 'force-cache' });
 
-                if (response.status === 429) {
-                    // Rate limited - retry with exponential backoff
-                    if (attempt < MAX_RETRIES) {
-                        const jitter = Math.random() * 100;
-                        const waitTime = Math.min(retryDelay + jitter, MAX_RETRY_DELAY_MS);
-                        console.log(`[Worker] Rate limited (429) for key=${key}, retrying in ${Math.round(waitTime)}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
-                        await delay(waitTime);
-                        retryDelay *= 2; // Exponential backoff
-                        continue;
-                    }
-                    throw new Error(`HTTP error 429 - Rate limited after ${MAX_RETRIES} retries`);
-                }
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error ${response.status}`);
-                }
-
-                return response;
-            } catch (error: unknown) {
-                lastError = error instanceof Error ? error : new Error(String(error));
-
-                // Network errors also get retried with backoff
-                if (attempt < MAX_RETRIES && !lastError.message.includes('HTTP error 4')) {
+            if (response.status === 429) {
+                if (attempt < MAX_RETRIES) {
                     const jitter = Math.random() * 100;
                     const waitTime = Math.min(retryDelay + jitter, MAX_RETRY_DELAY_MS);
+                    console.log(`[Worker] Rate limited (429) for key=${key}, retrying in ${Math.round(waitTime)}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
                     await delay(waitTime);
                     retryDelay *= 2;
                     continue;
                 }
-                throw lastError;
+                throw new Error(`HTTP error 429 - Rate limited after ${MAX_RETRIES} retries`);
             }
-        }
 
-        throw lastError || new Error('Unknown fetch error');
-    };
+            if (!response.ok) {
+                throw new Error(`HTTP error ${response.status}`);
+            }
 
-    // Build URL using query parameter for files with special characters
-    const url = buildAudioUrl(baseUrl, fileName);
-    const extension = fileName.split('.').pop()?.toLowerCase();
-
-    try {
-        // 첫 번째 시도
-        const response = await tryFetchWithRetry(url);
-        return await response.arrayBuffer();
-    } catch (error: unknown) {
-        // 확장자 대소문자 무관하게 폴백 처리
-        if (extension === 'wav') {
-            // .wav 요청 실패 시 .ogg로 재시도
-            const fallbackFileName = fileName.replace(/\.wav$/i, '.ogg');
-            const fallbackUrl = buildAudioUrl(baseUrl, fallbackFileName);
-            const response = await tryFetchWithRetry(fallbackUrl);
             return await response.arrayBuffer();
-        } else if (extension === 'ogg') {
-            // .ogg 요청 실패 시 .wav로 재시도
-            const fallbackFileName = fileName.replace(/\.ogg$/i, '.wav');
-            const fallbackUrl = buildAudioUrl(baseUrl, fallbackFileName);
-            const response = await tryFetchWithRetry(fallbackUrl);
-            return await response.arrayBuffer();
-        } else {
-            // 다른 확장자는 재시도 없이 에러 처리
-            throw error;
+        } catch (error: unknown) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+
+            // Network errors get retried with backoff (not 4xx client errors)
+            if (attempt < MAX_RETRIES && !lastError.message.includes('HTTP error 4')) {
+                const jitter = Math.random() * 100;
+                const waitTime = Math.min(retryDelay + jitter, MAX_RETRY_DELAY_MS);
+                await delay(waitTime);
+                retryDelay *= 2;
+                continue;
+            }
+            throw lastError;
         }
     }
+
+    throw lastError || new Error('Unknown fetch error');
 }
 
 // 단일 파일 로드 및 결과 전송

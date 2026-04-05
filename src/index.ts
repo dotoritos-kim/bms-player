@@ -15,6 +15,11 @@ export {
     useKeysoundPlayerStore,
     hashKeysounds,
     Notechart,
+    KeysoundPlayer,
+    createKeysoundPlayer,
+    resolveKeysoundFiles,
+    resolveKeysounds,
+    extractStem,
 } from './audio';
 
 export type {
@@ -37,6 +42,10 @@ export type {
     NoteInfo,
     CachedAudioEntry,
     CacheMetadata,
+    KeysoundPlayerOptions,
+    KeysoundPlayerResolveConfig,
+    ResolveOptions,
+    AudioFileMapFetcher,
 } from './audio';
 
 // ============ Game ============
@@ -120,4 +129,5 @@ export type {
 } from './preview';
 
 // ============ Types ============
-export type { KeysoundPlayer } from './types/KeysoundPlayer';
+// KeysoundPlayer interface kept for backward compatibility (consumers may reference it)
+export type { KeysoundPlayer as KeysoundPlayerInterface } from './types/KeysoundPlayer';

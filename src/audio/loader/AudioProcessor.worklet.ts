@@ -64,14 +64,23 @@ class AudioProcessor extends AudioWorkletProcessor {
                             break;
                         }
 
+                        // scheduledTime 지원: AudioContext 시간 기준으로 정확한 재생 시점 계산
+                        let delaySamples = 0;
+                        if (data.scheduledTime > 0) {
+                            delaySamples = Math.max(0, Math.round((data.scheduledTime - currentTime) * sampleRate));
+                        }
+
                         this.tracks.set(key, {
                             leftData,
                             rightData,
                             readIndex: startIndex, // 오프셋부터 시작
                             isPlaying: true,
                             loop: data.loop || false,
+                            delaySamples,
                         });
-                        this.trackVolumes.set(key, 1.0);
+                        // #VOLWAV 볼륨 적용 (0-1, 기본값 1.0)
+                        const trackVol = typeof data.volume === 'number' ? Math.max(0, Math.min(1, data.volume)) : 1.0;
+                        this.trackVolumes.set(key, trackVol);
                     }
                     break;
 
@@ -161,6 +170,12 @@ class AudioProcessor extends AudioWorkletProcessor {
             const dataLength = track.leftData.length;
 
             for (let i = 0; i < blockSize; i++) {
+                // 스케줄된 딜레이: 아직 재생 시작 전이면 스킵
+                if (track.delaySamples > 0) {
+                    track.delaySamples--;
+                    continue;
+                }
+
                 if (track.readIndex >= dataLength - 1) {
                     if (track.loop) {
                         track.readIndex = 0;

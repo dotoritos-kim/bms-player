@@ -1,4 +1,3 @@
-import * as _ from 'lodash';
 import * as BMS from '@rhythm-archive/bms-core';
 import { invariant } from '@epic-web/invariant';
 import {
@@ -219,26 +218,19 @@ export class Notechart {
     }
 
     /**
-     * 스크래치 옵션에 따른 키 모드를 반환합니다.
-     * @param scratch
-     * @returns {string}
+     * 노트 컬럼을 분석하여 키 모드를 반환합니다.
+     * @param scratch 스크래치 옵션 (호환성 유지용, 실제 키 모드 감지에는 미사용)
+     * @returns {string} 키 모드 ('4K'~'48K')
      */
-    getKeyMode(scratch: string): string {
-        const usedColumns: { [column: string]: boolean } = {};
-        for (const note of this.notes) {
-            usedColumns[note.column] = true;
-        }
-        if (scratch === 'off' && !usedColumns['1'] && !usedColumns['7']) return '5K';
-        if (scratch === 'left' && !usedColumns['6'] && !usedColumns['7']) return '5K';
-        if (scratch === 'right' && !usedColumns['1'] && !usedColumns['2']) return '5K';
-        return '7K';
+    getKeyMode(scratch?: string): string {
+        return detectKeyModeFromColumns(this.notes.map(n => n.column));
     }
 
     _preTransform(bmsNotes: BMS.BMSNote[], playerOptions: Partial<PlayerOptions>) {
-        let chain = _.chain(bmsNotes);
+        let result = [...bmsNotes];
         const keys = getKeys(bmsNotes);
         if (playerOptions.scratch === 'off') {
-            chain = chain.map((note: BMS.BMSNote) => {
+            result = result.map((note: BMS.BMSNote) => {
                 if (note.column && note.column === 'SC') {
                     return Object.assign({}, note, { column: null });
                 } else {
@@ -261,12 +253,12 @@ export class Notechart {
                 return note;
             };
             if (playerOptions.scratch === 'off') {
-                chain = chain.map(shiftNote(1));
+                result = result.map(shiftNote(1));
             } else if (playerOptions.scratch === 'right') {
-                chain = chain.map(shiftNote(2));
+                result = result.map(shiftNote(2));
             }
         }
-        return chain.value();
+        return result;
     }
 
     _generatePlayableNotesFromBMS(bmsNotes: BMS.BMSNote[]) {
@@ -280,6 +272,7 @@ export class Notechart {
                 spec.keysound = note.keysound;
                 spec.keysoundStart = note.keysoundStart;
                 spec.keysoundEnd = note.keysoundEnd;
+                spec.volume = this._keysounds.getVolume(note.keysound) / 100;
                 this._updateDuration(spec);
                 if (note.endBeat !== undefined) {
                     spec.end = this._generateEvent(note.endBeat);
@@ -316,6 +309,7 @@ export class Notechart {
                 spec.keysound = note.keysound;
                 spec.keysoundStart = note.keysoundStart;
                 spec.keysoundEnd = note.keysoundEnd;
+                spec.volume = this._keysounds.getVolume(note.keysound) / 100;
                 return spec;
             });
     }
@@ -357,4 +351,64 @@ function getKeys(bmsNotes: BMS.BMSNote[]) {
         }
     }
     return '5K';
+}
+
+/**
+ * 노트 컬럼 목록에서 키 모드를 감지합니다.
+ * bms-core에서 매핑된 컬럼 이름('1'-'48', 'SC', 'SC2', 'FZ', 'FZ2')을 분석합니다.
+ */
+function detectKeyModeFromColumns(columns: string[]): string {
+    const usedColumns = new Set<string>();
+    for (const col of columns) {
+        if (col) usedColumns.add(col);
+    }
+    if (usedColumns.size === 0) return '7K';
+
+    const maxNumericColumn = Array.from(usedColumns)
+        .filter(col => /^\d+$/.test(col))
+        .map(col => parseInt(col, 10))
+        .reduce((max, num) => Math.max(max, num), 0);
+
+    const hasSC = usedColumns.has('SC');
+    const hasSC2 = usedColumns.has('SC2');
+    const hasFZ = usedColumns.has('FZ');
+    const hasFZ2 = usedColumns.has('FZ2');
+    const hasIIDXSpecial = hasSC || hasSC2 || hasFZ || hasFZ2;
+
+    // DP detection
+    const iidxDP2P = ['10', '11', '12', '13', '14', 'SC2', 'FZ2'];
+    const hasIIDX2P = iidxDP2P.some(col => usedColumns.has(col));
+
+    if (hasIIDX2P || maxNumericColumn >= 10) {
+        if (hasIIDXSpecial) {
+            if (usedColumns.has('6') || usedColumns.has('7') || usedColumns.has('13') || usedColumns.has('14')) {
+                return '14K';
+            }
+            return '10K';
+        }
+        if (maxNumericColumn >= 24) return '48K';
+        if (maxNumericColumn >= 18) return '24K';
+        if (maxNumericColumn >= 10) return '18K';
+        return '12K';
+    }
+
+    // SP with IIDX special lanes
+    if (hasIIDXSpecial) {
+        const keyColumns = ['1', '2', '3', '4', '5', '6', '7'];
+        const usedKeyCount = keyColumns.filter(col => usedColumns.has(col)).length;
+        if (usedKeyCount >= 7) return '7K';
+        if (usedKeyCount === 6) return '6K';
+        if (usedKeyCount === 5) return '5K';
+        return '4K';
+    }
+
+    // Keyboard SP (no scratch)
+    if (maxNumericColumn >= 24) return '48K';
+    if (maxNumericColumn >= 12) return '24K';
+    if (maxNumericColumn >= 9) return '9K';
+    if (maxNumericColumn >= 8) return '8K';
+    if (maxNumericColumn >= 7) return '7K';
+    if (maxNumericColumn >= 6) return '6K';
+    if (maxNumericColumn >= 5) return '5K';
+    return '4K';
 }

@@ -55,6 +55,7 @@ export interface SoundedEvent extends GameEvent {
     keysound: string; // 해당 이벤트의 키 사운드
     keysoundStart?: number; // 키 사운드 시작 위치 (옵션)
     keysoundEnd?: number; // 키 사운드 종료 위치 (옵션)
+    volume?: number; // 키음 볼륨 (0-1, #VOLWAV 기반)
 }
 
 /** 게임 내에서 플레이할 수 있는 노트 인터페이스 */

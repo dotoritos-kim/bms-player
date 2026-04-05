@@ -885,7 +885,7 @@ export class AudioPreloader {
      * AudioContext resume을 기다리지 않음
      * @param offset - 재생 시작 위치 (초 단위, 기본: 0)
      */
-    public playAudioSync(key: string, loop = false, uniquePlay = true, offset = 0): string | null {
+    public playAudioSync(key: string, loop = false, uniquePlay = true, offset = 0, scheduledTime = 0, volume = 1): string | null {
         if (!this.audioWorkletNode) {
             console.warn('[AudioPreloader] playAudioSync: AudioWorkletNode not initialized');
             return null;
@@ -931,7 +931,7 @@ export class AudioPreloader {
             {
                 type: 'play',
                 key: trackId,
-                data: { bufferLeft: leftData, bufferRight: rightData, loop, offset },
+                data: { bufferLeft: leftData, bufferRight: rightData, loop, offset, scheduledTime, volume },
             },
             { transfer: transferList }
         );
@@ -1017,7 +1017,45 @@ export class AudioPreloader {
         return this.audioBuffers.has(key);
     }
 
+    /**
+     * 키음의 파형 데이터를 다운샘플링하여 반환 (파형 표시용)
+     * @param key 키음 ID (lowercase)
+     * @param samplesPerBeat 비트당 샘플 수 (기본 32)
+     * @param bpm BPM (시간→비트 변환용)
+     * @returns Float32Array of amplitude values (0~1), or null
+     */
+    public getWaveformData(key: string, samplesPerBeat: number = 32, bpm: number = 130): Float32Array | null {
+        const buffer = this.audioBuffers.get(key);
+        if (!buffer) return null;
+        const channelData = buffer.getChannelData(0); // mono or left channel
+        const durationSec = buffer.duration;
+        const durationBeats = (durationSec * bpm) / 60;
+        const totalSamples = Math.ceil(durationBeats * samplesPerBeat);
+        if (totalSamples <= 0) return null;
+        const result = new Float32Array(totalSamples);
+        const samplesPerChunk = Math.floor(channelData.length / totalSamples);
+        for (let i = 0; i < totalSamples; i++) {
+            const start = i * samplesPerChunk;
+            const end = Math.min(start + samplesPerChunk, channelData.length);
+            let maxAmp = 0;
+            for (let j = start; j < end; j++) {
+                const abs = Math.abs(channelData[j]);
+                if (abs > maxAmp) maxAmp = abs;
+            }
+            result[i] = maxAmp;
+        }
+        return result;
+    }
+
     public releaseAllResources(): void {
+        // 워클렛에 정지/해제 메시지를 먼저 전송 (트랙 데이터 잔존 방지)
+        try {
+            this.stopAllAudio();
+            this.clearAllAudio();
+        } catch {
+            // 이미 닫힌 포트 등 무시
+        }
+
         this.worker.terminate();
         this.audioDataMap.clear();
         this.audioBuffers.clear();
