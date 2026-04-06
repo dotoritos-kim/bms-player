@@ -165,6 +165,10 @@ export class AudioPreloader {
     // 디버깅용: 이미 경고한 누락 키 추적
     private _warnedMissingKeys?: Set<string>;
 
+    // abort() 지원
+    private aborted = false;
+    private _abortResolve: (() => void) | undefined;
+
     /**
      * AudioPreloader 생성자
      * @param baseUrl - 오디오 파일이 위치한 기본 URL
@@ -229,6 +233,7 @@ export class AudioPreloader {
      * 단일 오디오 파일 디코딩 (점진적 디코딩용)
      */
     private async decodeOne(key: string, arrayBuffer: ArrayBuffer): Promise<void> {
+        if (this.aborted) return;
         // 이미 디코딩되었거나 캐시에 있으면 스킵
         if (this.audioBuffers.has(key)) return;
 
@@ -257,6 +262,7 @@ export class AudioPreloader {
 
         try {
             const audioBuf = await this.audioContext.decodeAudioData(arrayBuffer);
+            if (this.aborted) return;
             this.audioBuffers.set(key, audioBuf);
             this.decodedCount++;
 
@@ -265,6 +271,7 @@ export class AudioPreloader {
                 addToCache(cacheKey, audioBuf);
             }
         } catch (err: unknown) {
+            if (this.aborted) return;
             console.error(`[Decode fail] key=${key}`, err);
             // 실패 시 무음 버퍼 생성
             const silent = this.audioContext.createBuffer(
@@ -352,7 +359,16 @@ export class AudioPreloader {
         this.loadedCount = cachedCount;
         this.totalCount = fileCount;
 
-        return new Promise((resolve) => {
+        return new Promise<void>((resolve) => {
+            const cleanup = () => {
+                this.worker.removeEventListener('message', onMessage);
+                this._abortResolve = undefined;
+                resolve();
+            };
+
+            // abort() 호출 시 즉시 resolve할 수 있도록 저장
+            this._abortResolve = cleanup;
+
             this.worker.postMessage({
                 type: 'LOAD_AUDIO',
                 payload: { baseUrl: this.baseUrl, fileMap: uncachedFileMap },
@@ -367,8 +383,7 @@ export class AudioPreloader {
                 }
                 // 개별 파일 에러는 무시하고 DONE까지 기다림 (일부 키사운드가 없을 수 있음)
                 if (type === 'DONE') {
-                    this.worker.removeEventListener('message', onMessage);
-                    resolve();
+                    cleanup();
                 }
                 // ERROR는 constructor의 onmessage 핸들러에서 로깅됨
             };
@@ -377,6 +392,8 @@ export class AudioPreloader {
     }
 
     public async decodeAll(): Promise<void> {
+        if (this.aborted) return;
+
         // 점진적 디코딩이 활성화된 경우, 대부분의 파일이 이미 디코딩되었을 수 있음
         const promises: Promise<void>[] = [];
         for (const [key, arrayBuf] of this.audioDataMap.entries()) {
@@ -384,12 +401,7 @@ export class AudioPreloader {
 
             // detach된 buffer 스킵
             if (arrayBuf.byteLength === 0) {
-                const silent = this.audioContext.createBuffer(
-                    1,
-                    this.audioContext.sampleRate,
-                    this.audioContext.sampleRate,
-                );
-                this.audioBuffers.set(key, silent);
+                this.audioBuffers.set(key, this.audioContext.createBuffer(1, this.audioContext.sampleRate, this.audioContext.sampleRate));
                 this.decodedCount++;
                 continue;
             }
@@ -408,6 +420,7 @@ export class AudioPreloader {
             const p = this.audioContext
                 .decodeAudioData(arrayBuf)
                 .then((audioBuf) => {
+                    if (this.aborted) return; // abort 후 결과 저장 스킵
                     this.audioBuffers.set(key, audioBuf);
                     this.decodedCount++;
                     // 캐시에 저장
@@ -416,19 +429,21 @@ export class AudioPreloader {
                     }
                 })
                 .catch((err: unknown) => {
+                    if (this.aborted) return;
                     console.error(`[Decode fail] key=${key}`, err);
                     // 실패 시 무음
-                    const silent = this.audioContext.createBuffer(
-                        1,
-                        this.audioContext.sampleRate,
-                        this.audioContext.sampleRate,
-                    );
-                    this.audioBuffers.set(key, silent);
+                    this.audioBuffers.set(key, this.audioContext.createBuffer(1, this.audioContext.sampleRate, this.audioContext.sampleRate));
                     this.decodedCount++;
                 });
             promises.push(p);
         }
-        await Promise.all(promises);
+
+        // abort() 호출 시 Promise.all을 기다리지 않고 즉시 반환
+        const abortPromise = new Promise<void>((resolve) => {
+            this._abortResolve = resolve;
+        });
+        await Promise.race([Promise.all(promises), abortPromise]);
+        this._abortResolve = undefined;
     }
 
     /**
@@ -1047,6 +1062,17 @@ export class AudioPreloader {
         return result;
     }
 
+    /**
+     * 진행 중인 loadAll() 또는 decodeAll()을 즉시 중단합니다.
+     * 이미 시작된 디코딩 Promise는 완료되지만 결과를 저장하지 않습니다.
+     * releaseAllResources() 호출 전에 abort()를 먼저 호출하면 고아 Promise를 최소화합니다.
+     */
+    public abort(): void {
+        this.aborted = true;
+        this._abortResolve?.();
+        this._abortResolve = undefined;
+    }
+
     public releaseAllResources(): void {
         // 워클렛에 정지/해제 메시지를 먼저 전송 (트랙 데이터 잔존 방지)
         try {
@@ -1059,6 +1085,16 @@ export class AudioPreloader {
         this.worker.terminate();
         this.audioDataMap.clear();
         this.audioBuffers.clear();
+
+        // 글로벌 캐시에서 이 인스턴스의 baseUrl에 해당하는 항목 제거
+        if (this.useCache) {
+            const prefix = `${this.cacheKeyPrefix}:`;
+            for (const key of globalAudioBufferCache.keys()) {
+                if (key.startsWith(prefix)) {
+                    globalAudioBufferCache.delete(key);
+                }
+            }
+        }
 
         // 이펙트 노드 disconnect (메모리 누수 방지)
         try {
