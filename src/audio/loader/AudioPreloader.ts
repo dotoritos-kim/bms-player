@@ -340,6 +340,9 @@ export class AudioPreloader {
             }
         }
 
+        // abort() was called during IndexedDB check — bail out early
+        if (this.aborted) return;
+
         // 모든 파일이 캐시에 있으면 Worker 요청 스킵
         const uncachedCount = Object.keys(uncachedFileMap).length;
         if (uncachedCount === 0) {
