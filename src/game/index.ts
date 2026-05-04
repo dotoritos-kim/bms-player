@@ -54,6 +54,9 @@ export type {
   SerializedNotechart,
   MainToWorkerMessage,
   WorkerToMainMessage,
+} from './workerProtocol';
+
+export type {
   SchedulerMainToWorker as AudioSchedulerMainToWorker,
   SchedulerWorkerToMain as AudioSchedulerWorkerToMain,
   SchedulerNote,

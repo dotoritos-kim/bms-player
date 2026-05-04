@@ -48,7 +48,7 @@ const LOOKAHEAD = 0.100; // 100ms lookahead
 const UI_UPDATE_INTERVAL = 50; // ms between UI tick updates
 
 function post(msg: SchedulerWorkerToMain): void {
-  (self as unknown as { postMessage: (msg: SchedulerWorkerToMain) => void }).postMessage(msg);
+  (self as unknown as DedicatedWorkerGlobalScope).postMessage(msg);
 }
 
 function getCurrentSec(): number {

@@ -19,6 +19,7 @@
  */
 import { AudioProcessorWorkletUrl } from './AudioProcessor.worklet';
 import { AudioProcessorPostMessage } from './types';
+import type { LoaderOutbound } from './messages';
 import { audioIndexedDBCache } from '../cache';
 
 // IndexedDB 캐시 키 생성 헬퍼
@@ -195,18 +196,21 @@ export class AudioPreloader {
             latencyHint: options?.latencyHint ?? 'interactive',
         });
         this.worker = worker;
-        this.worker.onmessage = (e) => {
-            const { type, payload } = e.data;
+        this.worker.onmessage = (e: MessageEvent<LoaderOutbound>) => {
+            const msg = e.data;
             if (this.onWorkerMessage) {
-                this.onWorkerMessage(type, payload);
+                this.onWorkerMessage(msg.type, msg.payload);
             }
-            switch (type) {
-                case 'PROGRESS':
+            switch (msg.type) {
+                case 'PROGRESS': {
+                    const payload = msg.payload;
                     this.loadingProgress = payload.loadedCount / payload.total;
                     this.loadedCount = payload.loadedCount;
                     this.totalCount = payload.total;
                     break;
-                case 'LOADED':
+                }
+                case 'LOADED': {
+                    const payload = msg.payload;
                     this.audioDataMap.set(payload.key, payload.arrayBuffer);
                     // IndexedDB에 캐시 저장 (비동기, 에러 무시)
                     // decodeAudioData가 원본 buffer를 detach하므로 IDB에는 복사본 저장
@@ -219,12 +223,15 @@ export class AudioPreloader {
                         this.decodeOne(payload.key, payload.arrayBuffer);
                     }
                     break;
+                }
                 case 'DONE':
                     this.isWorkerDone = true;
                     break;
-                case 'ERROR':
+                case 'ERROR': {
+                    const payload = msg.payload;
                     console.error(`[Error] key=${payload.key}, file=${payload.fileName}, msg=${payload.message}`);
                     break;
+                }
             }
         };
     }
