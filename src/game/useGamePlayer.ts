@@ -8,6 +8,7 @@ import type { Notechart } from '../audio/judgements';
 import type { KeysoundPlayer } from '../types/KeysoundPlayer';
 import {
   GameLoop,
+  WorkerGameLoop,
   InputHandler,
   type GameLoopState,
   type GameLoopCallbacks,
@@ -51,6 +52,8 @@ export interface GamePlayerOptions {
   playSide?: '1P' | '2P' | 'DP';
   /** 플로팅 하이스피드 (BPM 변속 시 Green Number 유지) */
   floatingHiSpeed?: boolean;
+  /** Worker 인스턴스 (제공 시 WorkerGameLoop 사용, 백그라운드 재생 지원) */
+  worker?: Worker;
 }
 
 export interface GamePlayerState {
@@ -157,7 +160,7 @@ export function useGamePlayer(
   const [triggeredMineIds, setTriggeredMineIds] = useState<Set<number>>(new Set());
 
   // Refs
-  const gameLoopRef = useRef<GameLoop | null>(null);
+  const gameLoopRef = useRef<GameLoop | WorkerGameLoop | null>(null);
   const inputHandlerRef = useRef<InputHandler | null>(null);
 
   // 초기화
@@ -244,8 +247,8 @@ export function useGamePlayer(
     },
   }), []);
 
-  // GameLoop 생성 함수
-  const createGameLoop = useCallback(() => {
+  // GameLoop 생성 함수 (Worker가 제공되면 WorkerGameLoop 사용)
+  const createGameLoop = useCallback((): GameLoop | WorkerGameLoop | null => {
     if (!notechart || !keysoundPlayer || !keysoundPlayer.isReady) {
       return null;
     }
@@ -259,29 +262,34 @@ export function useGamePlayer(
     }
 
     const opts = optionsRef.current;
+    const commonConfig = {
+      notechart,
+      keysoundPlayer,
+      audioContext,
+      gaugeType: opts.gaugeType ?? 'groove',
+      total: opts.total ?? 200,
+      rank: opts.rank ?? 2,
+      defexrank: opts.defexrank,
+      inputHandler: inputHandlerRef.current ?? undefined,
+      startOffset: opts.startOffset ?? 0,
+      playbackRate: opts.playbackRate ?? 1,
+      judgmentOffset: opts.judgmentOffset ?? 0,
+      visualOffset: opts.visualOffset ?? 0,
+      autoplay: opts.autoplay ?? false,
+    };
 
-    return new GameLoop(
-      {
-        notechart,
-        keysoundPlayer,
-        audioContext,
-        gaugeType: opts.gaugeType ?? 'groove',
-        total: opts.total ?? 200,
-        rank: opts.rank ?? 2,
-        defexrank: opts.defexrank,
-        inputHandler: inputHandlerRef.current ?? undefined,
-        startOffset: opts.startOffset ?? 0,
-        playbackRate: opts.playbackRate ?? 1,
-        judgmentOffset: opts.judgmentOffset ?? 0,
-        visualOffset: opts.visualOffset ?? 0,
-        autoplay: opts.autoplay ?? false,
-      },
-      callbacks
-    );
+    if (opts.worker) {
+      return new WorkerGameLoop(
+        { ...commonConfig, worker: opts.worker },
+        callbacks,
+      );
+    }
+
+    return new GameLoop(commonConfig, callbacks);
   }, [notechart, keysoundPlayer, callbacks]);
 
   // 액션: 시작
-  const start = useCallback(() => {
+  const start = useCallback(async () => {
     if (!isReady) return;
 
     // 기존 게임 루프 정리
@@ -298,7 +306,7 @@ export function useGamePlayer(
     setLastJudgment(null);
     setJudgmentQueue([]);
     setTriggeredMineIds(new Set());
-    gameLoop.start();
+    await gameLoop.start();
   }, [isReady, createGameLoop]);
 
   // 액션: 일시정지

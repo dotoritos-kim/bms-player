@@ -31,6 +31,34 @@ export type {
   LandmineEvent,
 } from './GameLoop';
 
+export { GameEngine } from './GameEngine';
+export type {
+  GameEngineConfig,
+  GameEngineState,
+  PlaySoundCommand,
+  TickResult,
+  NextNoteInfo,
+} from './GameEngine';
+
+export { WorkerGameLoop } from './WorkerGameLoop';
+export type { WorkerGameLoopConfig } from './WorkerGameLoop';
+
+export { WorkerAudioScheduler } from './WorkerAudioScheduler';
+export type {
+  WorkerAudioSchedulerConfig,
+  SchedulerTickCallback,
+  SchedulerEndCallback,
+} from './WorkerAudioScheduler';
+
+export type {
+  SerializedNotechart,
+  MainToWorkerMessage,
+  WorkerToMainMessage,
+  SchedulerMainToWorker as AudioSchedulerMainToWorker,
+  SchedulerWorkerToMain as AudioSchedulerWorkerToMain,
+  SchedulerNote,
+} from './AudioSchedulerWorker';
+
 export { GameCanvas } from './GameCanvas';
 export type { GameCanvasProps, GameCanvasHandle, LaneConfig } from './GameCanvas';
 export {

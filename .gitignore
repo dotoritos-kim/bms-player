@@ -1,3 +1,22 @@
 node_modules/
 dist/
 *.tsbuildinfo
+
+# 환경 / 시크릿
+.env
+.env.local
+.env.*.local
+
+# 아카이브
+*.zip
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# 커버리지
+coverage/

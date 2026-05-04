@@ -10,6 +10,8 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { BMSParser, KeySounds, Timing } from '@rhythm-archive/bms-core';
 import type { BMSNote } from '@rhythm-archive/bms-core';
 import { AudioPreloader, FileMap, resolveKeysoundFiles, type ResolveOptions, type AudioFileMapFetcher } from '../audio';
+import { WorkerAudioScheduler } from '../game/WorkerAudioScheduler';
+import type { SchedulerNote } from '../game/AudioSchedulerWorker';
 
 export interface BmsPreviewResolveConfig {
     /** Repository slug */
@@ -42,6 +44,8 @@ export interface BmsPreviewOptions {
     workerFactory?: () => Worker;
     /** stem 기반 파일 해석 설정 (없으면 원본 파일명 사용) */
     resolve?: BmsPreviewResolveConfig;
+    /** Audio scheduler Worker factory (제공 시 Worker 기반 스케줄링, 백그라운드 재생 지원) */
+    audioSchedulerWorkerFactory?: () => Worker;
 }
 
 export interface BmsPreviewState {
@@ -134,6 +138,10 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
 
     // Track current time in ref to avoid stale closure issues
     const currentTimeRef = useRef(0);
+
+    // Worker-based audio scheduler (optional)
+    const audioSchedulerRef = useRef<WorkerAudioScheduler | null>(null);
+    const { audioSchedulerWorkerFactory } = options;
 
     /**
      * 미리듣기 파일 존재 여부 확인
@@ -307,6 +315,45 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
             currentIndex: 0,
         };
 
+        // Worker-based scheduler (optional, for background playback)
+        if (audioSchedulerWorkerFactory && preloaderRef.current) {
+            audioSchedulerRef.current?.dispose();
+            const schedulerNotes: SchedulerNote[] = sortedNotes
+                .filter(n => n.keysound)
+                .map(n => ({
+                    sec: timing.beatToSeconds(n.beat),
+                    keysound: keysounds.get(n.keysound)
+                        ? n.keysound.toLowerCase()
+                        : n.keysound.toLowerCase(),
+                    offset: 0,
+                    volume: volumeRef.current,
+                }));
+            const schedulerWorker = audioSchedulerWorkerFactory();
+            audioSchedulerRef.current = new WorkerAudioScheduler({
+                worker: schedulerWorker,
+                preloader: preloaderRef.current,
+                notes: schedulerNotes,
+            });
+            audioSchedulerRef.current.setOnTick((currentSec: number) => {
+                currentTimeRef.current = currentSec;
+                setState(prev => ({
+                    ...prev,
+                    currentTime: currentSec,
+                    playProgress: durationRef.current > 0 ? Math.min(currentSec / durationRef.current, 1) : 0,
+                }));
+            });
+            audioSchedulerRef.current.setOnEnd(() => {
+                isPlayingRef.current = false;
+                currentTimeRef.current = 0;
+                setState(prev => ({
+                    ...prev,
+                    status: 'ready',
+                    currentTime: 0,
+                    playProgress: 0,
+                }));
+            });
+        }
+
         durationRef.current = duration;
         setState(prev => ({
             ...prev,
@@ -415,12 +462,21 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
             audioRef.current.play();
             setState(prev => ({ ...prev, status: 'playing' }));
         } else if (state.mode === 'bgm-channel' && bgmDataRef.current) {
-            // BGM 재생 시작
             isPlayingRef.current = true;
-            // Use ref to avoid stale closure - currentTimeRef is updated immediately in seek()
-            bgmDataRef.current.startTime = performance.now() - (currentTimeRef.current * 1000);
             setState(prev => ({ ...prev, status: 'playing' }));
-            schedulerRef.current = requestAnimationFrame(runBgmScheduler);
+
+            if (audioSchedulerRef.current) {
+                // Worker-based scheduling (background-safe)
+                if (state.status === 'paused') {
+                    audioSchedulerRef.current.resume(currentTimeRef.current, 1);
+                } else {
+                    audioSchedulerRef.current.play(currentTimeRef.current, 1);
+                }
+            } else {
+                // Fallback: rAF-based scheduling
+                bgmDataRef.current.startTime = performance.now() - (currentTimeRef.current * 1000);
+                schedulerRef.current = requestAnimationFrame(runBgmScheduler);
+            }
         }
     }, [state.status, state.mode, runBgmScheduler]);
 
@@ -435,7 +491,9 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
         if (state.mode === 'preview-file' && audioRef.current) {
             audioRef.current.pause();
         } else if (state.mode === 'bgm-channel') {
-            if (schedulerRef.current) {
+            if (audioSchedulerRef.current) {
+                audioSchedulerRef.current.pause();
+            } else if (schedulerRef.current) {
                 cancelAnimationFrame(schedulerRef.current);
                 schedulerRef.current = null;
             }
@@ -455,17 +513,20 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
         } else if (state.mode === 'bgm-channel') {
-            if (schedulerRef.current) {
-                cancelAnimationFrame(schedulerRef.current);
-                schedulerRef.current = null;
+            if (audioSchedulerRef.current) {
+                audioSchedulerRef.current.stop();
+            } else {
+                if (schedulerRef.current) {
+                    cancelAnimationFrame(schedulerRef.current);
+                    schedulerRef.current = null;
+                }
+                if (preloaderRef.current) {
+                    preloaderRef.current.stopAllAudio();
+                }
             }
             if (bgmDataRef.current) {
                 bgmDataRef.current.currentIndex = 0;
                 bgmDataRef.current.startTime = 0;
-            }
-            // 모든 활성 사운드 정지
-            if (preloaderRef.current) {
-                preloaderRef.current.stopAllAudio();
             }
         }
 
@@ -489,36 +550,54 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
         if (state.mode === 'preview-file' && audioRef.current) {
             audioRef.current.currentTime = clampedTime;
         } else if (state.mode === 'bgm-channel' && bgmDataRef.current) {
-            const { notes, timing } = bgmDataRef.current;
-            const wasPlaying = isPlayingRef.current;
+            if (audioSchedulerRef.current) {
+                // Worker-based seek
+                audioSchedulerRef.current.seek(clampedTime, 1);
+            } else {
+                // Fallback: rAF-based seek
+                const { notes, timing } = bgmDataRef.current;
+                const wasPlaying = isPlayingRef.current;
 
-            // 재생 중이라면 스케줄러 일시 중지
-            if (wasPlaying && schedulerRef.current) {
-                cancelAnimationFrame(schedulerRef.current);
-                schedulerRef.current = null;
-            }
-
-            // seek 시 현재 재생 중인 모든 사운드 정지
-            if (preloaderRef.current) {
-                preloaderRef.current.stopAllAudio();
-            }
-
-            // 해당 시간 이후의 첫 노트 인덱스 찾기
-            let newIndex = 0;
-            for (let i = 0; i < notes.length; i++) {
-                if (timing.beatToSeconds(notes[i].beat) >= clampedTime) {
-                    newIndex = i;
-                    break;
+                if (wasPlaying && schedulerRef.current) {
+                    cancelAnimationFrame(schedulerRef.current);
+                    schedulerRef.current = null;
                 }
-                newIndex = i + 1;
-            }
 
-            bgmDataRef.current.currentIndex = newIndex;
-            bgmDataRef.current.startTime = performance.now() - (clampedTime * 1000);
+                if (preloaderRef.current) {
+                    preloaderRef.current.stopAllAudio();
+                }
 
-            // 재생 중이었다면 스케줄러 재시작
-            if (wasPlaying) {
-                schedulerRef.current = requestAnimationFrame(runBgmScheduler);
+                let newIndex = 0;
+                for (let i = 0; i < notes.length; i++) {
+                    if (timing.beatToSeconds(notes[i].beat) >= clampedTime) {
+                        newIndex = i;
+                        break;
+                    }
+                    newIndex = i + 1;
+                }
+
+                // Catch-up: play keysounds that started before clampedTime but are still audible
+                if (preloaderRef.current) {
+                    for (let i = newIndex - 1; i >= 0; i--) {
+                        const note = notes[i];
+                        if (!note.keysound) continue;
+                        const noteTime = timing.beatToSeconds(note.beat);
+                        const key = note.keysound.toLowerCase();
+                        const duration = preloaderRef.current.getAudioDuration(key);
+                        if (duration <= 0) continue;
+                        const offset = clampedTime - noteTime;
+                        if (offset < duration) {
+                            preloaderRef.current.playAudioSync(key, false, true, offset);
+                        }
+                    }
+                }
+
+                bgmDataRef.current.currentIndex = newIndex;
+                bgmDataRef.current.startTime = performance.now() - (clampedTime * 1000);
+
+                if (wasPlaying) {
+                    schedulerRef.current = requestAnimationFrame(runBgmScheduler);
+                }
             }
         }
 
@@ -551,6 +630,10 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
         isPlayingRef.current = false;
         currentTimeRef.current = 0;
 
+        if (audioSchedulerRef.current) {
+            audioSchedulerRef.current.dispose();
+            audioSchedulerRef.current = null;
+        }
         if (schedulerRef.current) {
             cancelAnimationFrame(schedulerRef.current);
             schedulerRef.current = null;
