@@ -101,7 +101,7 @@ function getCurrentGameTime(): number {
 // ==================== Message Handler ====================
 
 function post(msg: WorkerToMainMessage): void {
-  (self as unknown as { postMessage: (msg: WorkerToMainMessage) => void }).postMessage(msg);
+  (self as unknown as DedicatedWorkerGlobalScope).postMessage(msg);
 }
 
 function serializeState(state: GameEngineState): SerializedGameState {

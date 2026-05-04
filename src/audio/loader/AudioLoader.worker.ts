@@ -11,9 +11,8 @@
  * ```
  */
 
-interface FileMap {
-    [key: string]: string;
-}
+import type { FileMap, LoaderInbound } from './messages';
+import { postFromLoaderWorker } from './messages';
 
 // 브라우저 동시 연결 제한 (대부분 6개)
 const CONCURRENT_LIMIT = 6;
@@ -99,7 +98,7 @@ async function loadAndSendFile(
         loadedCount.value++;
 
         // 진행상황(PROGRESS) 전송
-        self.postMessage({
+        postFromLoaderWorker({
             type: 'PROGRESS',
             payload: {
                 key,
@@ -110,7 +109,7 @@ async function loadAndSendFile(
         });
 
         // 메인 스레드로 ArrayBuffer 전송 (Transferable)
-        self.postMessage(
+        postFromLoaderWorker(
             {
                 type: 'LOADED',
                 payload: {
@@ -119,14 +118,14 @@ async function loadAndSendFile(
                     arrayBuffer,
                 },
             },
-            { transfer: [arrayBuffer] },
+            [arrayBuffer],
         );
 
         return true;
     } catch (error: unknown) {
         // 개별 파일 실패는 에러 메시지만 보내고 계속 진행
         loadedCount.value++;
-        self.postMessage({
+        postFromLoaderWorker({
             type: 'PROGRESS',
             payload: {
                 key,
@@ -135,7 +134,7 @@ async function loadAndSendFile(
                 total,
             },
         });
-        self.postMessage({
+        postFromLoaderWorker({
             type: 'ERROR',
             payload: { key, fileName, message: String(error) },
         });
@@ -144,45 +143,48 @@ async function loadAndSendFile(
 }
 
 // Worker 메시지 핸들러
-self.onmessage = async (event: MessageEvent) => {
-    const { type, payload } = event.data;
+self.onmessage = async (event: MessageEvent<LoaderInbound>) => {
+    const msg = event.data;
 
-    if (type === 'LOAD_AUDIO') {
-        const { baseUrl, fileMap } = payload as {
-            baseUrl: string;
-            fileMap: FileMap;
-        };
+    switch (msg.type) {
+        case 'LOAD_AUDIO': {
+            const { baseUrl, fileMap } = msg.payload;
 
-        const entries = Object.entries(fileMap);
-        const total = entries.length;
+            const entries = Object.entries(fileMap);
+            const total = entries.length;
 
-        if (total === 0) {
-            self.postMessage({ type: 'DONE', payload: { total: 0, loaded: 0 } });
-            return;
-        }
-
-        const loadedCount = { value: 0 };
-
-        // 병렬 로딩: CONCURRENT_LIMIT 개씩 배치로 처리
-        for (let i = 0; i < entries.length; i += CONCURRENT_LIMIT) {
-            const batch = entries.slice(i, i + CONCURRENT_LIMIT);
-            const promises = batch.map(([key, fileName]) =>
-                loadAndSendFile(baseUrl, key, fileName, loadedCount, total),
-            );
-
-            // 배치 내에서는 병렬 실행, 배치 간에는 순차 실행
-            await Promise.all(promises);
-
-            // 다음 배치 전 딜레이 (마지막 배치 제외) - 서버 부하 분산
-            if (i + CONCURRENT_LIMIT < entries.length) {
-                await delay(BATCH_DELAY_MS);
+            if (total === 0) {
+                postFromLoaderWorker({
+                    type: 'DONE',
+                    payload: { total: 0, loaded: 0 },
+                });
+                return;
             }
-        }
 
-        // 모든 파일 로딩 완료
-        self.postMessage({
-            type: 'DONE',
-            payload: { total, loaded: loadedCount.value },
-        });
+            const loadedCount = { value: 0 };
+
+            // 병렬 로딩: CONCURRENT_LIMIT 개씩 배치로 처리
+            for (let i = 0; i < entries.length; i += CONCURRENT_LIMIT) {
+                const batch = entries.slice(i, i + CONCURRENT_LIMIT);
+                const promises = batch.map(([key, fileName]) =>
+                    loadAndSendFile(baseUrl, key, fileName, loadedCount, total),
+                );
+
+                // 배치 내에서는 병렬 실행, 배치 간에는 순차 실행
+                await Promise.all(promises);
+
+                // 다음 배치 전 딜레이 (마지막 배치 제외) - 서버 부하 분산
+                if (i + CONCURRENT_LIMIT < entries.length) {
+                    await delay(BATCH_DELAY_MS);
+                }
+            }
+
+            // 모든 파일 로딩 완료
+            postFromLoaderWorker({
+                type: 'DONE',
+                payload: { total, loaded: loadedCount.value },
+            });
+            break;
+        }
     }
 };
