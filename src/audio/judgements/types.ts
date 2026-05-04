@@ -79,3 +79,23 @@ export interface GameLandmine extends GameEvent {
 export interface NoteInfo {
     combos: 2 | 1;
 }
+
+/**
+ * `INotechart` 는 게임 엔진(`GameEngine`/`GameLoop`)이 차트 데이터를 소비하기 위해
+ * 필요로 하는 최소 표면을 정의한다.
+ *
+ * - 메인 스레드에서는 본 클래스 `Notechart` 가 이 인터페이스를 만족한다.
+ * - Worker 스레드에서는 `NotechartProxy` 등 직렬화 사본 기반 구현이 이 인터페이스를
+ *   만족하면 그대로 `GameEngine` 에 주입할 수 있다.
+ *
+ * 이 인터페이스는 외부 호환성을 위한 *broadening* 용도로만 도입되었으며 (`Notechart`
+ * 클래스의 공개 시그니처에는 영향이 없다), 새 메서드를 함부로 추가하지 않는다.
+ */
+export interface INotechart {
+    readonly notes: GameNote[];
+    readonly autos: SoundedEvent[];
+    readonly landmines: GameNote[];
+    readonly duration: number;
+    secondsToBeat(seconds: number): number;
+    beatToSeconds(beat: number): number;
+}

@@ -253,8 +253,10 @@ export function useGamePlayer(
       return null;
     }
 
-    const audioContext = (keysoundPlayer as unknown as { preloader?: { context?: AudioContext } })
-      .preloader?.context;
+    // KeysoundPlayer 인터페이스의 `getAudioContext()` 우선 사용, 미구현 구현체는
+    // 기존 `preloader.context` 로 폴백 (deprecated 호환성).
+    const audioContext =
+      keysoundPlayer.getAudioContext?.() ?? keysoundPlayer.preloader?.context ?? null;
 
     if (!audioContext) {
       console.error('AudioContext not available');

@@ -14,15 +14,17 @@ import type {
   SerializedGameState,
   WorkerInitPayload,
 } from './workerProtocol';
-import type { Notechart, GameNote, SoundedEvent } from '../audio/judgements';
+import type { INotechart, GameNote, SoundedEvent } from '../audio/judgements';
 
 // ==================== Lightweight Notechart Proxy ====================
 
 /**
  * Worker 내에서 사용할 경량 Notechart 프록시
  * 실제 Notechart 대신 미리 계산된 데이터로 동작
+ *
+ * `INotechart` 를 구현하므로 `GameEngine` 에 직접 주입할 수 있다 (cast 불필요).
  */
-class NotechartProxy {
+class NotechartProxy implements INotechart {
   readonly notes: GameNote[];
   readonly autos: SoundedEvent[];
   readonly landmines: GameNote[];
@@ -181,7 +183,7 @@ function handleInit(payload: WorkerInitPayload): void {
     const proxy = new NotechartProxy(payload.notechart);
 
     engine = new GameEngine({
-      notechart: proxy as unknown as Notechart,
+      notechart: proxy,
       ...payload.config,
     });
 

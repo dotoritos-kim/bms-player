@@ -513,6 +513,17 @@ export class KeysoundPlayer {
     this._isRecovering = false;
   }
 
+  /**
+   * 내부 `AudioContext` 를 노출한다.
+   *
+   * `useGamePlayer` 등이 KeysoundPlayer 캡슐화를 깨는 cast (`as unknown as { preloader }`)
+   * 없이 AudioContext 에 접근할 수 있게 하기 위한 인터페이스 메서드 (`types/KeysoundPlayer.ts`
+   * 의 optional `getAudioContext`).
+   */
+  getAudioContext(): AudioContext | null {
+    return this._preloader?.context ?? null;
+  }
+
   getContextState(): AudioContextState | null {
     return this._preloader?.context?.state ?? null;
   }
