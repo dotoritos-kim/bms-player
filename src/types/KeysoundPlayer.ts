@@ -16,6 +16,16 @@ export interface KeysoundPlayer {
   stopAll(): void;
   /** Release all resources */
   dispose(): void;
-  /** Internal preloader reference (used by GameLoop for AudioContext access) */
+  /**
+   * 내부 `AudioPreloader` 참조 (GameLoop 등 일부 콜러가 AudioContext 접근을 위해 사용).
+   *
+   * @deprecated 직접 참조 대신 `getAudioContext()` 를 사용하세요. 다음 메이저에서 제거 예정.
+   */
   readonly preloader?: AudioPreloader;
+  /**
+   * 내부 `AudioContext` 를 안전하게 노출한다 (preloader 캡슐화 우회용 cast 제거 목적).
+   * 외부 구현체에서는 선택적으로 구현 가능 — 미구현 시 호출자는 `preloader?.context` 로
+   * 폴백한다.
+   */
+  getAudioContext?(): AudioContext | null;
 }

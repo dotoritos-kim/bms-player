@@ -19,7 +19,7 @@
  */
 import { AudioProcessorWorkletUrl } from './AudioProcessor.worklet';
 import { AudioProcessorPostMessage } from './types';
-import type { LoaderOutbound } from './messages';
+import type { LoaderOutbound, FileMap } from './messages';
 import { audioIndexedDBCache } from '../cache';
 
 // IndexedDB 캐시 키 생성 헬퍼
@@ -27,9 +27,11 @@ function makeIndexedDBKey(baseUrl: string, filename: string): string {
     return `${baseUrl}/${filename}`;
 }
 
-export interface FileMap {
-    [key: string]: string; // 예: { "kick": "kick.wav", "bgm": "bgm.ogg" }
-}
+/**
+ * 외부 호환성을 위해 `FileMap` 은 본 모듈에서도 그대로 노출한다.
+ * 실제 정의는 `./messages` 의 단일 출처에서 관리된다.
+ */
+export type { FileMap } from './messages';
 
 // 10밴드 이퀄라이저 주파수 정의
 export const EQ_FREQUENCIES = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const;

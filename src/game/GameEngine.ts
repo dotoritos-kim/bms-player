@@ -5,7 +5,7 @@
  * 사이드 이펙트 없이 커맨드를 반환하여 호출자가 실행.
  */
 
-import type { Notechart, GameNote, SoundedEvent } from '../audio/judgements';
+import type { INotechart, GameNote, SoundedEvent } from '../audio/judgements';
 import { JudgmentEngine, type Judgment } from './JudgmentEngine';
 import { GaugeSystem, type GaugeType } from './GaugeSystem';
 import { ScoreManager, type ScoreState } from './ScoreManager';
@@ -14,7 +14,7 @@ import type { KeyColumn } from './InputHandler';
 // ==================== Config & State Types ====================
 
 export interface GameEngineConfig {
-  notechart: Notechart;
+  notechart: INotechart;
   gaugeType?: GaugeType;
   total?: number;
   rank?: number;
@@ -107,7 +107,7 @@ export interface NextNoteInfo {
 // ==================== GameEngine ====================
 
 export class GameEngine {
-  private notechart: Notechart;
+  private notechart: INotechart;
   private judgment: JudgmentEngine;
   private gauge: GaugeSystem;
   private score: ScoreManager;
