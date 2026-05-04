@@ -16,23 +16,43 @@ jobs:
         node-version: ['20.x']
 
     steps:
-      - name: Checkout
+      - name: Checkout bms-player
         uses: actions/checkout@v4
+        with:
+          path: bms-player
+
+      - name: Checkout bms-core (sibling workspace dep)
+        uses: actions/checkout@v4
+        with:
+          repository: dotoritos-kim/bms-core
+          token: ${{ secrets.WORKSPACE_REPO_TOKEN || secrets.SIBLING_REPO_TOKEN || github.token }}
+          path: bms-core
+        continue-on-error: true
 
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+      - name: Build bms-core
+        if: hashFiles('bms-core/package.json') != ''
+        working-directory: bms-core
+        run: |
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          npm run build
+
+      - name: Install bms-player dependencies
+        working-directory: bms-player
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
       - name: Type-check (tsc --noEmit)
+        working-directory: bms-player
         run: npx tsc --noEmit
 
       - name: Build
+        working-directory: bms-player
         run: npm run build
 
       - name: Test (vitest)
+        working-directory: bms-player
         run: npm test
