@@ -11,6 +11,15 @@
 
 import type { Notechart, GameNote, SoundedEvent } from '../audio/judgements';
 import type { KeysoundPlayer } from '../types/KeysoundPlayer';
+import {
+  type GamePhase,
+  PHASE_READY,
+  PHASE_PLAYING,
+  PHASE_PAUSED,
+  PHASE_COMPLETED,
+  PHASE_FAILED,
+  gamePhaseToFlags,
+} from '../types/GamePhase';
 import { InputHandler, type KeyInput, type KeyColumn } from './InputHandler';
 import { JudgmentEngine, type Judgment } from './JudgmentEngine';
 import { GaugeSystem, type GaugeType } from './GaugeSystem';
@@ -48,13 +57,19 @@ export interface GameLoopConfig {
 }
 
 export interface GameLoopState {
-  /** 게임 진행 중 여부 */
+  /**
+   * 통합 게임 상태(Stage 3, REFACTOR-PLAN §6.2). 신규 컨슈머는 이 필드를
+   * 우선 사용한다. 기존 4-boolean(`isPlaying`/`isPaused`/`isFailed`/`isCompleted`)
+   * 도 호환을 위해 유지되며, `phase`로부터 derive된다(`gamePhaseToFlags`).
+   */
+  phase: GamePhase;
+  /** @deprecated `phase.kind` 사용 권장. `phase`에서 derive (`playing`/`paused`). */
   isPlaying: boolean;
-  /** 일시정지 여부 */
+  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
   isPaused: boolean;
-  /** 실패 여부 */
+  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
   isFailed: boolean;
-  /** 완료 여부 */
+  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
   isCompleted: boolean;
   /** 현재 게임 시간 (ms) */
   currentTime: number;
@@ -138,11 +153,8 @@ export class GameLoop {
   private judgmentOffset: number = 0;    // 판정 오프셋 (ms)
   private visualOffset: number = 0;      // 비주얼 오프셋 (ms)
 
-  // 상태
-  private _isPlaying: boolean = false;
-  private _isPaused: boolean = false;
-  private _isFailed: boolean = false;
-  private _isCompleted: boolean = false;
+  // 상태 (Stage 3 — discriminated union; 4-boolean 호환은 derived getter)
+  private _phase: GamePhase = PHASE_READY;
   private animationFrameId: number = 0;
   private firstTickDone: boolean = false;
 
@@ -247,7 +259,8 @@ export class GameLoop {
    * 게임 시작
    */
   async start(): Promise<void> {
-    if (this._isPlaying) return;
+    // 이미 진행 중이면 무시 (playing 또는 paused 모두 active로 간주)
+    if (this._phase.kind === 'playing' || this._phase.kind === 'paused') return;
 
     // AudioContext가 suspended 상태면 resume
     if (this.audioContext.state === 'suspended') {
@@ -264,10 +277,7 @@ export class GameLoop {
       return;
     }
 
-    this._isPlaying = true;
-    this._isPaused = false;
-    this._isFailed = false;
-    this._isCompleted = false;
+    this._phase = PHASE_PLAYING;
 
     // AudioContext 시작 시간 기록
     this.contextStartTime = this.audioContext.currentTime;
@@ -286,9 +296,9 @@ export class GameLoop {
    * 일시정지
    */
   pause(): void {
-    if (!this._isPlaying || this._isPaused) return;
+    if (this._phase.kind !== 'playing') return;
 
-    this._isPaused = true;
+    this._phase = PHASE_PAUSED;
     this.pauseTime = this.getCurrentTime();
     this.inputHandler.setEnabled(false);
     cancelAnimationFrame(this.animationFrameId);
@@ -299,9 +309,9 @@ export class GameLoop {
    * 재개
    */
   resume(): void {
-    if (!this._isPlaying || !this._isPaused) return;
+    if (this._phase.kind !== 'paused') return;
 
-    this._isPaused = false;
+    this._phase = PHASE_PLAYING;
     // 일시정지된 시간만큼 시작 시간 조정
     const pauseDuration = (this.audioContext.currentTime * 1000) -
       (this.contextStartTime * 1000 + this.pauseTime);
@@ -315,20 +325,38 @@ export class GameLoop {
    * 정지
    */
   stop(): void {
-    this._isPlaying = false;
-    this._isPaused = false;
+    this._phase = PHASE_READY;
     cancelAnimationFrame(this.animationFrameId);
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
   }
 
   /**
+   * 현재 게임 상태 (Stage 3 — discriminated union).
+   * 외부 API의 4-boolean 호환은 `getState()`/`emitUpdate()`의 derived 필드 참고.
+   */
+  get phase(): GamePhase {
+    return this._phase;
+  }
+
+  /** @deprecated `phase.kind === 'playing' || phase.kind === 'paused'` 사용 권장. */
+  get isPlaying(): boolean {
+    return this._phase.kind === 'playing' || this._phase.kind === 'paused';
+  }
+  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
+  get isPaused(): boolean { return this._phase.kind === 'paused'; }
+  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
+  get isCompleted(): boolean { return this._phase.kind === 'completed'; }
+  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
+  get isFailed(): boolean { return this._phase.kind === 'failed'; }
+
+  /**
    * 현재 게임 시간 (ms)
    * AudioContext.currentTime 기반으로 정확한 시간 계산
    */
   getCurrentTime(): number {
-    if (!this._isPlaying) return 0;
-    if (this._isPaused) return this.pauseTime;
+    if (this._phase.kind !== 'playing' && this._phase.kind !== 'paused') return 0;
+    if (this._phase.kind === 'paused') return this.pauseTime;
 
     const elapsed = (this.audioContext.currentTime - this.contextStartTime) * 1000;
     return (elapsed + this.startOffset) * this.playbackRate;
@@ -346,7 +374,7 @@ export class GameLoop {
    * 게임 루프 메인 틱
    */
   private tick = (): void => {
-    if (!this._isPlaying || this._isPaused) return;
+    if (this._phase.kind !== 'playing') return;
 
     // 첫 프레임에서 contextStartTime 재설정 (타이밍 점프 방지)
     // AudioContext.resume() async 완료와 tick() 호출 사이의 시간 차이를 보정
@@ -527,7 +555,7 @@ export class GameLoop {
    * 키다운 핸들러
    */
   private handleKeyDown = (input: KeyInput): void => {
-    if (!this._isPlaying || this._isPaused || this._autoplay) return;
+    if (this._phase.kind !== 'playing' || this._autoplay) return;
 
     const { column } = input;
 
@@ -578,7 +606,7 @@ export class GameLoop {
    * 키업 핸들러
    */
   private handleKeyUp = (input: KeyInput): void => {
-    if (!this._isPlaying || this._isPaused || this._autoplay) return;
+    if (this._phase.kind !== 'playing' || this._autoplay) return;
 
     const { column } = input;
 
@@ -723,14 +751,16 @@ export class GameLoop {
       activeHoldNoteIds.add(note.id);
     }
 
-    // currentTime 파라미터에서 직접 비트 계산 (getCurrentBeat()는 _isPlaying 의존)
+    // currentTime 파라미터에서 직접 비트 계산 (getCurrentBeat()는 phase 의존)
     const currentBeat = this.notechart.secondsToBeat(currentTime / 1000);
 
+    const flags = gamePhaseToFlags(this._phase);
     const state: GameLoopState = {
-      isPlaying: this._isPlaying,
-      isPaused: this._isPaused,
-      isFailed: this._isFailed,
-      isCompleted: this._isCompleted,
+      phase: this._phase,
+      isPlaying: flags.isPlaying,
+      isPaused: flags.isPaused,
+      isFailed: flags.isFailed,
+      isCompleted: flags.isCompleted,
       currentTime,
       visualTime: currentTime + this.visualOffset,
       currentBeat,
@@ -770,15 +800,14 @@ export class GameLoop {
    * 게임 완료
    */
   private complete(): void {
-    // 상태 변경 전에 현재 시간 캡처 (_isPlaying=false 시 getCurrentTime()이 0 반환)
+    // 상태 변경 전에 현재 시간 캡처 (phase=completed 이후 getCurrentTime()이 0 반환)
     const finalTime = this.getCurrentTime();
 
-    this._isCompleted = true;
-    this._isPlaying = false;
+    this._phase = PHASE_COMPLETED;
     cancelAnimationFrame(this.animationFrameId);
     this.inputHandler.setEnabled(false);
 
-    // React에 최종 상태 전달 (isCompleted: true)
+    // React에 최종 상태 전달 (phase=completed)
     this.emitUpdate(finalTime);
 
     this.callbacks.onComplete?.(this.score.getState());
@@ -788,16 +817,15 @@ export class GameLoop {
    * 게임 실패
    */
   private fail(): void {
-    // 상태 변경 전에 현재 시간 캡처 (_isPlaying=false 시 getCurrentTime()이 0 반환)
+    // 상태 변경 전에 현재 시간 캡처 (phase=failed 이후 getCurrentTime()이 0 반환)
     const finalTime = this.getCurrentTime();
 
-    this._isFailed = true;
-    this._isPlaying = false;
+    this._phase = PHASE_FAILED;
     cancelAnimationFrame(this.animationFrameId);
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
 
-    // React에 최종 상태 전달 (isFailed: true)
+    // React에 최종 상태 전달 (phase=failed)
     this.emitUpdate(finalTime);
 
     this.callbacks.onFailed?.(this.score.getState());
@@ -815,11 +843,13 @@ export class GameLoop {
       activeHoldNoteIds.add(note.id);
     }
 
+    const flags = gamePhaseToFlags(this._phase);
     return {
-      isPlaying: this._isPlaying,
-      isPaused: this._isPaused,
-      isFailed: this._isFailed,
-      isCompleted: this._isCompleted,
+      phase: this._phase,
+      isPlaying: flags.isPlaying,
+      isPaused: flags.isPaused,
+      isFailed: flags.isFailed,
+      isCompleted: flags.isCompleted,
       currentTime,
       visualTime: currentTime + this.visualOffset,
       currentBeat: this.getCurrentBeat(),

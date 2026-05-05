@@ -3,6 +3,7 @@
  */
 
 import type { GameNote, SoundedEvent } from '../audio/judgements';
+import type { GamePhase } from '../types/GamePhase';
 import type { Judgment } from './JudgmentEngine';
 import type { GaugeType } from './GaugeSystem';
 import type { ScoreState } from './ScoreManager';
@@ -93,9 +94,15 @@ export interface NextNotePayload {
 
 /** Serialized version of GameEngineState (Set → Array for postMessage) */
 export interface SerializedGameState {
+  /** Stage 3 — discriminated union (Worker→Main 직렬화에 안전한 plain object). */
+  phase: GamePhase;
+  /** @deprecated `phase`로부터 derive. */
   isPlaying: boolean;
+  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
   isPaused: boolean;
+  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
   isFailed: boolean;
+  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
   isCompleted: boolean;
   currentTime: number;
   visualTime: number;

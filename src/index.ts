@@ -143,3 +143,17 @@ export type {
 // ============ Types ============
 // KeysoundPlayer interface kept for backward compatibility (consumers may reference it)
 export type { KeysoundPlayer as KeysoundPlayerInterface } from './types/KeysoundPlayer';
+
+// Stage 3 — GamePhase 통합 상태 (REFACTOR-PLAN §6.2). 신규 컨슈머용 노출.
+export type { GamePhase, GamePhaseKind } from './types/GamePhase';
+export {
+    PHASE_READY,
+    PHASE_PLAYING,
+    PHASE_PAUSED,
+    PHASE_COMPLETED,
+    PHASE_FAILED,
+    canTransition,
+    gamePhaseToFlags,
+    isActivePhase,
+    isTerminalPhase,
+} from './types/GamePhase';

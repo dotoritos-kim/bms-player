@@ -8,6 +8,14 @@
 
 import type { Notechart } from '../audio/judgements';
 import type { KeysoundPlayer } from '../types/KeysoundPlayer';
+import {
+  type GamePhase,
+  PHASE_READY,
+  PHASE_PLAYING,
+  PHASE_PAUSED,
+  PHASE_COMPLETED,
+  PHASE_FAILED,
+} from '../types/GamePhase';
 import type { KeyColumn } from './InputHandler';
 import { InputHandler } from './InputHandler';
 import type { GameLoopState, GameLoopCallbacks, JudgmentEvent, LandmineEvent } from './GameLoop';
@@ -48,11 +56,8 @@ export class WorkerGameLoop {
   private playbackRate: number;
   private startOffset: number;
 
-  // State
-  private _isPlaying: boolean = false;
-  private _isPaused: boolean = false;
-  private _isFailed: boolean = false;
-  private _isCompleted: boolean = false;
+  // State (Stage 3 — discriminated union; legacy 4-boolean은 derived getter)
+  private _phase: GamePhase = PHASE_READY;
   private _lastState: GameLoopState | null = null;
 
   // NextNotes cache for 0ms keysound playback
@@ -141,7 +146,7 @@ export class WorkerGameLoop {
   // ==================== Lifecycle ====================
 
   async start(): Promise<void> {
-    if (this._isPlaying) return;
+    if (this._phase.kind === 'playing' || this._phase.kind === 'paused') return;
 
     // Wait for worker to be ready
     await this.readyPromise;
@@ -160,10 +165,7 @@ export class WorkerGameLoop {
       return;
     }
 
-    this._isPlaying = true;
-    this._isPaused = false;
-    this._isFailed = false;
-    this._isCompleted = false;
+    this._phase = PHASE_PLAYING;
     this.contextStartTime = this.audioContext.currentTime;
     this.firstTickDone = false;
 
@@ -172,8 +174,8 @@ export class WorkerGameLoop {
   }
 
   pause(): void {
-    if (!this._isPlaying || this._isPaused) return;
-    this._isPaused = true;
+    if (this._phase.kind !== 'playing') return;
+    this._phase = PHASE_PAUSED;
     this.pauseTime = this.getCurrentTime();
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
@@ -181,8 +183,8 @@ export class WorkerGameLoop {
   }
 
   resume(): void {
-    if (!this._isPlaying || !this._isPaused) return;
-    this._isPaused = false;
+    if (this._phase.kind !== 'paused') return;
+    this._phase = PHASE_PLAYING;
     const pauseDuration = (this.audioContext.currentTime * 1000) -
       (this.contextStartTime * 1000 + this.pauseTime);
     this.contextStartTime += pauseDuration / 1000;
@@ -191,8 +193,7 @@ export class WorkerGameLoop {
   }
 
   stop(): void {
-    this._isPlaying = false;
-    this._isPaused = false;
+    this._phase = PHASE_READY;
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
     this.postToWorker({ type: 'stop' });
@@ -208,8 +209,8 @@ export class WorkerGameLoop {
   // ==================== State ====================
 
   getCurrentTime(): number {
-    if (!this._isPlaying) return 0;
-    if (this._isPaused) return this.pauseTime;
+    if (this._phase.kind !== 'playing' && this._phase.kind !== 'paused') return 0;
+    if (this._phase.kind === 'paused') return this.pauseTime;
     const elapsed = (this.audioContext.currentTime - this.contextStartTime) * 1000;
     return (elapsed + this.startOffset) * this.playbackRate;
   }
@@ -218,15 +219,23 @@ export class WorkerGameLoop {
     return this._lastState;
   }
 
-  get isPlaying(): boolean { return this._isPlaying; }
-  get isPaused(): boolean { return this._isPaused; }
-  get isCompleted(): boolean { return this._isCompleted; }
-  get isFailed(): boolean { return this._isFailed; }
+  /** Stage 3 — discriminated union 우선 노출. */
+  get phase(): GamePhase { return this._phase; }
+  /** @deprecated `phase.kind === 'playing' || phase.kind === 'paused'` 사용 권장. */
+  get isPlaying(): boolean {
+    return this._phase.kind === 'playing' || this._phase.kind === 'paused';
+  }
+  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
+  get isPaused(): boolean { return this._phase.kind === 'paused'; }
+  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
+  get isCompleted(): boolean { return this._phase.kind === 'completed'; }
+  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
+  get isFailed(): boolean { return this._phase.kind === 'failed'; }
 
   // ==================== Key Input (Main Thread) ====================
 
   private handleKeyDown = (input: { column: KeyColumn }): void => {
-    if (!this._isPlaying || this._isPaused) return;
+    if (this._phase.kind !== 'playing') return;
 
     const { column } = input;
 
@@ -247,7 +256,7 @@ export class WorkerGameLoop {
   };
 
   private handleKeyUp = (input: { column: KeyColumn }): void => {
-    if (!this._isPlaying || this._isPaused) return;
+    if (this._phase.kind !== 'playing') return;
 
     const { column } = input;
     this.callbacks.onKeyInput?.(column, false);
@@ -313,15 +322,13 @@ export class WorkerGameLoop {
         break;
 
       case 'complete':
-        this._isCompleted = true;
-        this._isPlaying = false;
+        this._phase = PHASE_COMPLETED;
         this.inputHandler.setEnabled(false);
         this.callbacks.onComplete?.(msg.payload);
         break;
 
       case 'failed':
-        this._isFailed = true;
-        this._isPlaying = false;
+        this._phase = PHASE_FAILED;
         this.inputHandler.setEnabled(false);
         this.keysoundPlayer.stopAll();
         this.callbacks.onFailed?.(msg.payload);

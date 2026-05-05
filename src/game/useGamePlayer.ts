@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Notechart } from '../audio/judgements';
 import type { KeysoundPlayer } from '../types/KeysoundPlayer';
+import { PHASE_READY } from '../types/GamePhase';
 import {
   GameLoop,
   WorkerGameLoop,
@@ -61,13 +62,19 @@ export interface GamePlayerState {
   isLoading: boolean;
   /** 준비 완료 */
   isReady: boolean;
-  /** 게임 진행 중 */
+  /**
+   * 통합 게임 단계 (Stage 3, REFACTOR-PLAN §6.2). 신규 컨슈머는 이 필드를
+   * 우선 사용한다. 아래 4-boolean(`isPlaying`/`isPaused`/`isCompleted`/
+   * `isFailed`)은 호환을 위해 유지되며 `phase`로부터 derive된다.
+   */
+  phase: import('../types/GamePhase').GamePhase;
+  /** @deprecated `phase.kind === 'playing' || phase.kind === 'paused'` 사용 권장. */
   isPlaying: boolean;
-  /** 일시정지 */
+  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
   isPaused: boolean;
-  /** 완료 */
+  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
   isCompleted: boolean;
-  /** 실패 */
+  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
   isFailed: boolean;
   /** 현재 게임 시간 (ms) */
   currentTime: number;
@@ -130,6 +137,7 @@ export function useGamePlayer(
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [gameState, setGameState] = useState<GameLoopState>({
+    phase: PHASE_READY,
     isPlaying: false,
     isPaused: false,
     isFailed: false,
@@ -351,6 +359,7 @@ export function useGamePlayer(
   const state: GamePlayerState = useMemo(() => ({
     isLoading,
     isReady,
+    phase: gameState.phase,
     isPlaying: gameState.isPlaying,
     isPaused: gameState.isPaused,
     isCompleted: gameState.isCompleted,
