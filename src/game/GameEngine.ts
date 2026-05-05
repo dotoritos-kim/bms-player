@@ -6,6 +6,15 @@
  */
 
 import type { INotechart, GameNote, SoundedEvent } from '../audio/judgements';
+import {
+  type GamePhase,
+  PHASE_READY,
+  PHASE_PLAYING,
+  PHASE_PAUSED,
+  PHASE_COMPLETED,
+  PHASE_FAILED,
+  gamePhaseToFlags,
+} from '../types/GamePhase';
 import { JudgmentEngine, type Judgment } from './JudgmentEngine';
 import { GaugeSystem, type GaugeType } from './GaugeSystem';
 import { ScoreManager, type ScoreState } from './ScoreManager';
@@ -28,9 +37,15 @@ export interface GameEngineConfig {
 }
 
 export interface GameEngineState {
+  /** 통합 게임 상태(Stage 3, REFACTOR-PLAN §6.2). 신규 컨슈머는 이 필드를 우선 사용. */
+  phase: GamePhase;
+  /** @deprecated `phase`로부터 derive. */
   isPlaying: boolean;
+  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
   isPaused: boolean;
+  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
   isFailed: boolean;
+  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
   isCompleted: boolean;
   currentTime: number;
   visualTime: number;
@@ -119,11 +134,8 @@ export class GameEngine {
   private judgmentOffset: number;
   private visualOffset: number;
 
-  // State
-  private _isPlaying: boolean = false;
-  private _isPaused: boolean = false;
-  private _isFailed: boolean = false;
-  private _isCompleted: boolean = false;
+  // State (Stage 3 — discriminated union; legacy 4-boolean은 derived getter)
+  private _phase: GamePhase = PHASE_READY;
 
   // Note tracking
   private pendingNotes: GameNote[];
@@ -208,31 +220,37 @@ export class GameEngine {
   // ==================== Lifecycle ====================
 
   start(): void {
-    this._isPlaying = true;
-    this._isPaused = false;
-    this._isFailed = false;
-    this._isCompleted = false;
+    this._phase = PHASE_PLAYING;
     this.autoIndex = 0;
     this.lastUpdateTime = 0;
   }
 
-  pause(currentTime: number): void {
-    this._isPaused = true;
+  pause(_currentTime: number): void {
+    if (this._phase.kind !== 'playing') return;
+    this._phase = PHASE_PAUSED;
   }
 
   resume(): void {
-    this._isPaused = false;
+    if (this._phase.kind !== 'paused') return;
+    this._phase = PHASE_PLAYING;
   }
 
   stop(): void {
-    this._isPlaying = false;
-    this._isPaused = false;
+    this._phase = PHASE_READY;
   }
 
-  get isPlaying(): boolean { return this._isPlaying; }
-  get isPaused(): boolean { return this._isPaused; }
-  get isCompleted(): boolean { return this._isCompleted; }
-  get isFailed(): boolean { return this._isFailed; }
+  /** Stage 3 — discriminated union 우선 노출. */
+  get phase(): GamePhase { return this._phase; }
+  /** @deprecated `phase.kind === 'playing' || phase.kind === 'paused'` 사용 권장. */
+  get isPlaying(): boolean {
+    return this._phase.kind === 'playing' || this._phase.kind === 'paused';
+  }
+  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
+  get isPaused(): boolean { return this._phase.kind === 'paused'; }
+  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
+  get isCompleted(): boolean { return this._phase.kind === 'completed'; }
+  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
+  get isFailed(): boolean { return this._phase.kind === 'failed'; }
 
   // ==================== Main Tick ====================
 
@@ -252,7 +270,7 @@ export class GameEngine {
       nextNotes: new Map(),
     };
 
-    if (!this._isPlaying || this._isPaused) return result;
+    if (this._phase.kind !== 'playing') return result;
 
     // 1. Auto BGM sounds
     this.processAutoSounds(currentTime, result);
@@ -283,8 +301,7 @@ export class GameEngine {
     // 8. Completion check
     if (this.pendingNotes.length === 0 && this.activeHolds.size === 0) {
       if (this.autoIndex >= this.sortedAutos.length) {
-        this._isCompleted = true;
-        this._isPlaying = false;
+        this._phase = PHASE_COMPLETED;
         result.state = this.buildState(currentTime);
         result.completed = this.score.getState();
         return result;
@@ -293,8 +310,7 @@ export class GameEngine {
 
     // 9. Failure check
     if (this.gauge.isFailed()) {
-      this._isFailed = true;
-      this._isPlaying = false;
+      this._phase = PHASE_FAILED;
       result.state = this.buildState(currentTime);
       result.failed = this.score.getState();
       return result;
@@ -320,7 +336,7 @@ export class GameEngine {
       nextNotes: new Map(),
     };
 
-    if (!this._isPlaying || this._isPaused || this._autoplay) return result;
+    if (this._phase.kind !== 'playing' || this._autoplay) return result;
 
     this.heldKeys.add(column);
 
@@ -383,7 +399,7 @@ export class GameEngine {
       nextNotes: new Map(),
     };
 
-    if (!this._isPlaying || this._isPaused || this._autoplay) return result;
+    if (this._phase.kind !== 'playing' || this._autoplay) return result;
 
     this.heldKeys.delete(column);
 
@@ -632,11 +648,13 @@ export class GameEngine {
 
     const currentBeat = this.notechart.secondsToBeat(currentTime / 1000);
 
+    const flags = gamePhaseToFlags(this._phase);
     return {
-      isPlaying: this._isPlaying,
-      isPaused: this._isPaused,
-      isFailed: this._isFailed,
-      isCompleted: this._isCompleted,
+      phase: this._phase,
+      isPlaying: flags.isPlaying,
+      isPaused: flags.isPaused,
+      isFailed: flags.isFailed,
+      isCompleted: flags.isCompleted,
       currentTime,
       visualTime: currentTime + this.visualOffset,
       currentBeat,
