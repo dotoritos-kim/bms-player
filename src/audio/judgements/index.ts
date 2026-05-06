@@ -14,8 +14,8 @@ import {
 export * from './types';
 
 /**
- * Notechart 클래스는 단일 플레이어의 노트 차트에 대한 모든 정보를 관리하여
- * 게임에서 필요로 하는 정보를 제공합니다.
+ * Notechart manages all information about a single player's notechart and
+ * exposes the data the game runtime needs to drive playback.
  */
 export class Notechart {
     private _timing: BMS.Timing;
@@ -78,149 +78,150 @@ export class Notechart {
     }
 
     /**
-     * 노트 이벤트 배열을 반환합니다.
+     * Returns the array of note events.
      */
     get notes() {
         return this._notes;
     }
 
     /**
-     * 지뢰 이벤트 배열을 반환합니다.
+     * Returns the array of landmine events.
      */
     get landmines() {
         return this._landmines;
     }
 
     /**
-     * 자동 키 사운드 이벤트 배열을 반환합니다.
+     * Returns the array of auto-keysound events.
      */
     get autos() {
         return this._autos;
     }
 
     /**
-     * 사용할 모든 샘플 파일 배열을 반환합니다.
+     * Returns the array of every sample file the chart uses.
      */
     get samples() {
         return this._samples;
     }
 
     /**
-     * 키 사운드 ID에서 파일 이름으로 매핑하는 객체를 반환합니다.
+     * Returns the keysound-ID-to-filename mapping.
      */
     get keysounds() {
         return this._keysounds.all();
     }
 
     /**
-     * 바 라인 이벤트를 나타내는 객체를 반환합니다.
+     * Returns the bar-line event collection.
      */
     get barLines() {
         return this._barLines;
     }
 
     /**
-     * 이 노트차트의 모든 열 이름을 배열로 반환합니다.
+     * Returns every column name of this notechart as an array.
      */
     get columns() {
         return ['SC', '1', '2', '3', '4', '5', '6', '7'];
     }
 
     /**
-     * 노트차트의 전체 지속 시간(마지막 이벤트 시간)을 반환합니다.
+     * Returns the total duration of the notechart (the time of the last event).
      */
     get duration() {
         return this._duration;
     }
 
     /**
-     * 노트차트의 곡 정보를 반환합니다.
+     * Returns the song metadata for this notechart.
      */
     get songInfo() {
         return this._songInfo;
     }
 
     /**
-     * 아이캐치 이미지 반환
+     * Returns the eyecatch image filename.
      */
     get eyecatchImage() {
         return (this._images && this._images.eyecatch) || 'eyecatch_image.png';
     }
 
     /**
-     * 배경 이미지 반환
+     * Returns the background image filename.
      */
     get backgroundImage() {
         return (this._images && this._images.background) || 'back_image.png';
     }
 
     /**
-     * 특정 노트의 정보를 객체로 반환합니다.
+     * Returns the info object for a specific note.
      */
     info(note: GameNote): NoteInfo | undefined {
         return this._infos.get(note);
     }
 
     /**
-     * 비트 수를 노래 안에서의 위치(초)로 변환합니다.
+     * Converts a beat count to a position in seconds within the song.
      */
     beatToSeconds(beat: number) {
         return this._timing.beatToSeconds(beat);
     }
 
     /**
-     * 비트 수를 게임 내 위치로 변환합니다.
+     * Converts a beat count to its in-game position.
      */
     beatToPosition(beat: number) {
         return this._positioning.position(beat);
     }
 
     /**
-     * 마디 수를 비트로 변환합니다.
+     * Converts a measure number to a beat count.
      */
     measureToBeat(measure: number) {
         return (this._barLines[measure] || this._barLines[this._barLines.length - 1]).beat;
     }
 
     /**
-     * 노래 안에서의 위치(초)를 비트 수로 변환합니다.
+     * Converts a position in seconds to a beat count.
      */
     secondsToBeat(seconds: number) {
         return this._timing.secondsToBeat(seconds);
     }
 
     /**
-     * 노래 안에서의 위치(초)를 게임 내 위치로 변환합니다.
+     * Converts a position in seconds to an in-game position.
      */
     secondsToPosition(seconds: number) {
         return this.beatToPosition(this.secondsToBeat(seconds));
     }
 
     /**
-     * 특정 비트에서의 BPM을 찾습니다.
+     * Returns the BPM at a given beat.
      */
     bpmAtBeat(beat: number) {
         return this._timing.bpmAtBeat(beat);
     }
 
     /**
-     * 특정 비트에서의 스크롤 속도를 찾습니다.
+     * Returns the scroll speed at a given beat.
      */
     scrollSpeedAtBeat(beat: number) {
         return this._positioning.speed(beat);
     }
 
     /**
-     * 특정 비트에서의 노트 간격 요소를 계산합니다.
+     * Returns the note-spacing factor at a given beat.
      */
     spacingAtBeat(beat: number) {
         return this._spacing.factor(beat);
     }
 
     /**
-     * 노트 컬럼을 분석하여 키 모드를 반환합니다.
-     * @param scratch 스크래치 옵션 (호환성 유지용, 실제 키 모드 감지에는 미사용)
-     * @returns {string} 키 모드 ('4K'~'48K')
+     * Detects the key mode from the note columns.
+     * @param scratch retained for backward compatibility — unused by the
+     *   actual key-mode detection.
+     * @returns {string} key mode ('4K' through '48K').
      */
     getKeyMode(scratch?: string): string {
         return detectKeyModeFromColumns(this.notes.map(n => n.column));
@@ -245,7 +246,7 @@ export class Notechart {
                     const index = columnsToShift.indexOf(note.column);
                     if (index > -1) {
                         const newIndex = index + amount;
-                        invariant(newIndex < columnsToShift.length, '이상합니다. 열은 사용 가능한 열을 초과하여 이동할 수 없습니다.');
+                        invariant(newIndex < columnsToShift.length, 'Unexpected: column shift exceeds the available column count.');
                         const newColumn = columnsToShift[newIndex];
                         return Object.assign({}, note, { column: newColumn });
                     }
@@ -354,8 +355,9 @@ function getKeys(bmsNotes: BMS.BMSNote[]) {
 }
 
 /**
- * 노트 컬럼 목록에서 키 모드를 감지합니다.
- * bms-core에서 매핑된 컬럼 이름('1'-'48', 'SC', 'SC2', 'FZ', 'FZ2')을 분석합니다.
+ * Detects the key mode from the list of note columns.
+ * Analyses the column names mapped by bms-core ('1'-'48', 'SC', 'SC2',
+ * 'FZ', 'FZ2').
  */
 function detectKeyModeFromColumns(columns: string[]): string {
     const usedColumns = new Set<string>();

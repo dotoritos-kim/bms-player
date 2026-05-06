@@ -1,11 +1,11 @@
 /**
- * Audio Worklet 타입 정의
+ * AudioWorklet type definitions.
  *
- * 스테레오 오디오 재생을 위한 단순화된 타입 시스템
+ * A simplified type system for stereo audio playback.
  */
 
 /**
- * 스테레오 트랙 구조
+ * Stereo-track structure.
  */
 export interface StereoTrack {
     leftData: Float32Array;
@@ -16,7 +16,7 @@ export interface StereoTrack {
 }
 
 /**
- * 모노 트랙 구조 (하위 호환성)
+ * Mono-track structure (kept for backward compatibility).
  */
 export interface Track {
     data: Float32Array;
@@ -26,36 +26,36 @@ export interface Track {
 }
 
 /**
- * 재생 데이터 - 스테레오 버전
+ * Playback payload — stereo variant.
  */
 export interface StereoPlayData {
     bufferLeft: Float32Array;
     bufferRight: Float32Array;
     loop: boolean;
-    /** 재생 시작 위치 (초 단위) - seek 시 offset 재생용 */
+    /** Playback offset in seconds — used when seeking. */
     offset?: number;
-    /** AudioContext 예약 시간 (0이면 즉시 재생) */
+    /** Scheduled AudioContext time (0 = play immediately). */
     scheduledTime?: number;
-    /** 볼륨 (0-1) */
+    /** Volume (0-1). */
     volume?: number;
 }
 
 /**
- * 재생 데이터 - 모노 버전 (하위 호환성)
+ * Playback payload — mono variant (kept for backward compatibility).
  */
 export interface MonoPlayData {
     buffer: Float32Array;
     loop: boolean;
-    /** 재생 시작 위치 (초 단위) - seek 시 offset 재생용 */
+    /** Playback offset in seconds — used when seeking. */
     offset?: number;
-    /** AudioContext 예약 시간 (0이면 즉시 재생) */
+    /** Scheduled AudioContext time (0 = play immediately). */
     scheduledTime?: number;
-    /** 볼륨 (0-1) */
+    /** Volume (0-1). */
     volume?: number;
 }
 
 /**
- * AudioWorklet으로 보내는 메시지 타입
+ * Message types sent into the AudioWorklet.
  */
 export type AudioProcessorMessageType =
     | 'play'
@@ -68,7 +68,7 @@ export type AudioProcessorMessageType =
     | 'setPlaybackRate';
 
 /**
- * AudioWorklet 포스트 메시지 인터페이스
+ * Envelope for messages posted into the AudioWorklet.
  */
 export interface AudioProcessorPostMessage {
     type: AudioProcessorMessageType;
@@ -81,17 +81,17 @@ export interface AudioProcessorPostMessage {
 }
 
 /**
- * Worker에서 받는 메시지 타입
+ * Message type received from the worker.
  */
 export type WorkerMessageType = 'LOAD_AUDIO';
 
 /**
- * Worker로 보내는 응답 타입
+ * Response types sent back to the worker.
  */
 export type WorkerResponseType = 'PROGRESS' | 'LOADED' | 'DONE' | 'ERROR';
 
 /**
- * Worker 진행 상황 payload
+ * Worker progress payload.
  */
 export interface WorkerProgressPayload {
     key: string;
@@ -101,7 +101,7 @@ export interface WorkerProgressPayload {
 }
 
 /**
- * Worker 로드 완료 payload
+ * Worker load-completed payload.
  */
 export interface WorkerLoadedPayload {
     key: string;
@@ -110,7 +110,7 @@ export interface WorkerLoadedPayload {
 }
 
 /**
- * Worker 완료 payload
+ * Worker done payload.
  */
 export interface WorkerDonePayload {
     total: number;
@@ -118,7 +118,7 @@ export interface WorkerDonePayload {
 }
 
 /**
- * Worker 에러 payload
+ * Worker error payload.
  */
 export interface WorkerErrorPayload {
     key: string;

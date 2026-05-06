@@ -1,16 +1,16 @@
 /**
- * AudioPreloader.ts  —  Facade (S9 리팩터링)
+ * AudioPreloader.ts — Facade (S9 refactor).
  *
- * 내부 구현은 4개 클래스로 분리되었으며,
- * AudioPreloader 는 이를 조립하는 얇은 Facade 역할만 수행한다.
+ * The internal implementation is split into four classes; AudioPreloader
+ * is a thin facade that wires them together.
  *
- *   AudioFetchPipeline  — Worker 통신 + IndexedDB 캐시 체크
- *   AudioBufferStore    — LRU 메모리 캐시 + 버퍼 저장/조회
- *   AudioDecoder        — decodeAudioData 래핑 + 에러 폴백
- *   EffectChain         — EQ/Compressor/Reverb/Stereo 노드
- *   WorkletPlayback     — AudioWorkletNode 초기화 + 재생 메시지
+ *   AudioFetchPipeline  — Worker communication + IndexedDB cache lookup.
+ *   AudioBufferStore    — LRU in-memory cache for decoded buffers.
+ *   AudioDecoder        — wraps `decodeAudioData` with error fallback.
+ *   EffectChain         — EQ/Compressor/Reverb/Stereo nodes.
+ *   WorkletPlayback     — AudioWorkletNode init + playback messaging.
  *
- * **외부 공개 API 는 이전 버전과 동일하게 유지된다.**
+ * **The externally-public API is unchanged from the previous version.**
  *
  * @example
  * ```typescript
@@ -30,28 +30,28 @@ import { EffectChain } from '../pipeline/EffectChain';
 import { WorkletPlayback } from '../pipeline/WorkletPlayback';
 import { AudioFetchPipeline } from '../pipeline/AudioFetchPipeline';
 
-// ---- 공개 re-export (하위 호환) ----
+// ---- Public re-exports (backward compatibility) ----
 export type { FileMap } from './messages';
 export { EQ_FREQUENCIES, EQ_PRESETS } from '../pipeline/EffectChain';
 export type { EffectSettings } from '../pipeline/EffectChain';
 
 export interface AudioPreloaderOptions {
-    /** 파일 로드 중 점진적 디코딩 활성화 (기본: true) */
+    /** Decode files progressively while they download (default: true). */
     progressiveDecode?: boolean;
-    /** 간단한 이펙트 체인 사용 (기본: false) */
+    /** Use the simplified effect chain (default: false). */
     simplifiedEffects?: boolean;
-    /** 글로벌 메모리 캐시 사용 (기본: true) */
+    /** Use the global in-memory cache (default: true). */
     useCache?: boolean;
-    /** IndexedDB 영구 캐시 사용 (기본: true) */
+    /** Use the persistent IndexedDB cache (default: true). */
     useIndexedDBCache?: boolean;
-    /** AudioContext latencyHint */
+    /** AudioContext latencyHint. */
     latencyHint?: AudioContextLatencyCategory | number;
 }
 
 export type WorkerFactory = () => Worker;
 
 export class AudioPreloader {
-    // ---- 내부 서브시스템 ----
+    // ---- Internal subsystems ----
     private readonly store: AudioBufferStore;
     private readonly decoder: AudioDecoder;
     private readonly effects: EffectChain;
@@ -61,7 +61,7 @@ export class AudioPreloader {
     private readonly audioContext: AudioContext;
     private readonly progressiveDecode: boolean;
 
-    // abort 상태
+    // Abort state
     private aborted = false;
     private _abortResolve: (() => void) | undefined;
 
@@ -80,7 +80,7 @@ export class AudioPreloader {
             latencyHint: options?.latencyHint ?? 'interactive',
         });
 
-        // 서브시스템 초기화
+        // Subsystem initialisation
         this.store = new AudioBufferStore(baseUrl, useCache);
         this.decoder = new AudioDecoder(
             this.audioContext,
@@ -95,7 +95,7 @@ export class AudioPreloader {
             fileMap,
             worker,
             useIndexedDBCache,
-            // 점진적 디코딩 콜백
+            // Progressive-decode callback
             (key, buf) => {
                 if (this.progressiveDecode) {
                     void this.decoder.decodeOne(key, buf);
@@ -105,7 +105,7 @@ export class AudioPreloader {
         );
     }
 
-    // ---- 로딩 ----
+    // ---- Loading ----
 
     public async loadAll(): Promise<void> {
         await this.fetchPipeline.loadAll(() => this.aborted);
@@ -134,7 +134,7 @@ export class AudioPreloader {
         }
     }
 
-    // ---- AudioWorklet 초기화 ----
+    // ---- AudioWorklet initialisation ----
 
     public async initAudioWorklet(
         workletUrl?: string,
@@ -143,7 +143,7 @@ export class AudioPreloader {
         await this.playback.initWorklet(workletUrl, effectSettings);
     }
 
-    // ---- 이펙트 ----
+    // ---- Effects ----
 
     public applyEffectSettings(settings: import('../pipeline/EffectChain').EffectSettings): void {
         this.effects.apply(settings);
@@ -170,7 +170,7 @@ export class AudioPreloader {
     public setStereoEnabled(enabled: boolean): void { this.effects.setStereoEnabled(enabled); }
     public setStereoWidth(width: number): void { this.effects.setStereoWidth(width); }
 
-    // ---- 재생 ----
+    // ---- Playback ----
 
     public async playAudio(key: string, loop = false, uniquePlay = true, offset = 0): Promise<string | null> {
         return this.playback.playAudio(key, loop, uniquePlay, offset);
@@ -195,7 +195,7 @@ export class AudioPreloader {
     public adjustVolume(trackId: string, volume: number): void { this.playback.adjustVolume(trackId, volume); }
     public setPlaybackRate(rate: number): void { this.playback.setPlaybackRate(rate); }
 
-    // ---- 유틸 ----
+    // ---- Utilities ----
 
     public getAudioDuration(key: string): number {
         return this.store.get(key)?.duration ?? 0;
@@ -248,7 +248,7 @@ export class AudioPreloader {
         }
     }
 
-    // ---- 프로퍼티 ----
+    // ---- Properties ----
 
     public get isWorkerDone(): boolean { return this.fetchPipeline.isWorkerDone; }
     public get progress(): number { return this.fetchPipeline.progress; }
