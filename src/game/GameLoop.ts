@@ -1,15 +1,17 @@
 /**
- * BMS 게임 루프
- * 오디오-시각-입력 동기화의 핵심
+ * BMS 게임 루프 — rAF 기반 Main Thread 실행 환경
  *
  * 동기화 전략:
  * 1. AudioContext.currentTime을 마스터 클럭으로 사용
  * 2. 게임 시작 시 contextStartTime 기록
  * 3. 모든 게임 시간 = (AudioContext.currentTime - contextStartTime) * 1000
  * 4. requestAnimationFrame으로 렌더링, 입력은 이벤트 기반
+ *
+ * S7 (REFACTOR-PLAN): GameEngine에 게임 로직 위임(H2 중복 제거).
+ * GameLoop는 이제 타이밍·입력·rAF 스케줄링·사이드 이펙트 실행에만 집중.
  */
 
-import type { Notechart, GameNote, SoundedEvent } from '../audio/judgements';
+import type { Notechart } from '../audio/judgements';
 import type { KeysoundPlayer } from '../types/KeysoundPlayer';
 import {
   type GamePhase,
@@ -21,9 +23,12 @@ import {
   gamePhaseToFlags,
 } from '../types/GamePhase';
 import { InputHandler, type KeyInput, type KeyColumn } from './InputHandler';
-import { JudgmentEngine, type Judgment } from './JudgmentEngine';
-import { GaugeSystem, type GaugeType } from './GaugeSystem';
-import { ScoreManager, type ScoreState } from './ScoreManager';
+import { type GaugeType } from './GaugeSystem';
+import { type ScoreState } from './ScoreManager';
+import { type Judgment } from './JudgmentEngine';
+import { GameEngine, type GameEngineConfig } from './GameEngine';
+
+// ── Re-export types so callers don't break ─────────────────────────────────
 
 export interface GameLoopConfig {
   /** 노트 차트 */
@@ -132,137 +137,69 @@ export interface GameLoopCallbacks {
   onKeyInput?: (column: KeyColumn, held: boolean) => void;
 }
 
-export class GameLoop {
-  private notechart: Notechart;
-  private keysoundPlayer: KeysoundPlayer;
-  private audioContext: AudioContext;
-  private inputHandler: InputHandler;
-  private judgment: JudgmentEngine;
-  private gauge: GaugeSystem;
-  private score: ScoreManager;
-  private callbacks: GameLoopCallbacks;
+// ── GameLoop ────────────────────────────────────────────────────────────────
 
-  // 타이밍
-  private contextStartTime: number = 0;  // AudioContext 시작 시간
-  private startOffset: number = 0;       // 시작 오프셋 (ms)
-  private playbackRate: number = 1;
+export class GameLoop {
+  // S7: 모든 게임 로직은 GameEngine에 위임
+  private readonly engine: GameEngine;
+
+  private readonly keysoundPlayer: KeysoundPlayer;
+  private readonly audioContext: AudioContext;
+  private readonly inputHandler: InputHandler;
+  private readonly callbacks: GameLoopCallbacks;
+
+  // 타이밍 (GameLoop 전용: AudioContext 기반 클럭)
+  private contextStartTime: number = 0;
+  private readonly startOffset: number;
+  private readonly playbackRate: number;
   private pauseTime: number = 0;
 
-  // 레이턴시 보정
-  private audioLatency: number = 0;      // 오디오 레이턴시 (ms)
-  private judgmentOffset: number = 0;    // 판정 오프셋 (ms)
-  private visualOffset: number = 0;      // 비주얼 오프셋 (ms)
-
-  // 상태 (Stage 3 — discriminated union; 4-boolean 호환은 derived getter)
+  // 상태 (phase는 engine을 통해 읽되, GameLoop 자체도 phase 캐시 유지)
   private _phase: GamePhase = PHASE_READY;
   private animationFrameId: number = 0;
   private firstTickDone: boolean = false;
 
-  // 노트 추적
-  private pendingNotes: GameNote[];      // 아직 판정되지 않은 노트
-  private pendingLandmines: GameNote[];  // 아직 트리거되지 않은 지뢰 노트
-  private activeHolds: Map<KeyColumn, GameNote>; // 진행 중인 롱노트
-  private autoIndex: number = 0;         // 다음 자동 재생할 BGM 인덱스
-  private sortedAutos: SoundedEvent[];   // 시간순 정렬된 자동 사운드
-
-  // 오토플레이
-  private _autoplay: boolean = false;
-
-  // 마지막 상태 (렌더링 최적화)
-  private lastUpdateTime: number = 0;
-  private readonly UPDATE_INTERVAL = 4; // ~240fps 지원 (rAF가 자연 스로틀 역할)
-
-  // 최근 타이밍 오프셋 기록 (Early/Late 표시용)
-  private recentOffsets: number[] = [];
-  private recentOffsetsSnapshot: number[] = []; // React에 전달할 스냅샷 (변경 시에만 갱신)
-  private recentOffsetsDirty = false;
-  private readonly MAX_RECENT_OFFSETS = 50; // 최근 50개 기록
+  // setTimeout handle for autoplay key-release simulation (M7)
+  private autoplayReleaseTimers: ReturnType<typeof setTimeout>[] = [];
 
   constructor(config: GameLoopConfig, callbacks: GameLoopCallbacks = {}) {
-    // 필수 파라미터 검증
-    if (!config.notechart) {
-      throw new Error('GameLoop: notechart is required');
-    }
-    if (!config.keysoundPlayer) {
-      throw new Error('GameLoop: keysoundPlayer is required');
-    }
-    if (!config.audioContext) {
-      throw new Error('GameLoop: audioContext is required');
-    }
+    if (!config.notechart) throw new Error('GameLoop: notechart is required');
+    if (!config.keysoundPlayer) throw new Error('GameLoop: keysoundPlayer is required');
+    if (!config.audioContext) throw new Error('GameLoop: audioContext is required');
 
-    this.notechart = config.notechart;
     this.keysoundPlayer = config.keysoundPlayer;
     this.audioContext = config.audioContext;
     this.callbacks = callbacks;
     this.startOffset = config.startOffset ?? 0;
-    this.playbackRate = Math.max(0.1, Math.min(4, config.playbackRate ?? 1)); // 0.1x ~ 4x 제한
-
-    // 레이턴시 보정 설정 (범위 제한)
-    this.audioLatency = Math.max(-500, Math.min(500, config.audioLatency ?? 0));
-    this.judgmentOffset = Math.max(-500, Math.min(500, config.judgmentOffset ?? 0));
-    this.visualOffset = Math.max(-500, Math.min(500, config.visualOffset ?? 0));
+    this.playbackRate = Math.max(0.1, Math.min(4, config.playbackRate ?? 1));
 
     // 입력 핸들러
     this.inputHandler = config.inputHandler ?? new InputHandler();
     this.inputHandler.onKeyDown(this.handleKeyDown);
     this.inputHandler.onKeyUp(this.handleKeyUp);
 
-    // 판정 엔진
-    this.judgment = new JudgmentEngine({
-      rank: config.rank ?? 2,
+    // S7: 게임 로직 전량을 GameEngine에 위임
+    const engineConfig: GameEngineConfig = {
+      notechart: config.notechart,
+      gaugeType: config.gaugeType,
+      total: config.total,
+      rank: config.rank,
       defexrank: config.defexrank,
-      style: 'lr2',
-    });
-
-    // 노트 배열 안전 처리
-    const notes = this.notechart.notes ?? [];
-    const autos = this.notechart.autos ?? [];
-
-    // 노트 수 계산 (롱노트는 시작+끝 = 2, 최소 1로 보장)
-    const totalNotes = Math.max(1, notes.reduce((sum, note) => {
-      return sum + (note.end ? 2 : 1);
-    }, 0));
-
-    // 게이지 (TOTAL 최소값 보장)
-    const total = Math.max(100, config.total ?? 200);
-    this.gauge = new GaugeSystem(
-      config.gaugeType ?? 'groove',
-      total,
-      totalNotes
-    );
-
-    // 스코어
-    this.score = new ScoreManager({ totalNotes });
-
-    // 오토플레이 모드
-    this._autoplay = config.autoplay ?? false;
-
-    // 노트 준비 (시간순 정렬, NaN 시간 필터링)
-    this.pendingNotes = [...notes]
-      .filter((note) => !isNaN(note.time) && isFinite(note.time))
-      .sort((a, b) => a.time - b.time);
-    this.activeHolds = new Map();
-
-    // 지뢰 노트 준비
-    const landmines = this.notechart.landmines ?? [];
-    this.pendingLandmines = [...landmines]
-      .filter((mine) => !isNaN(mine.time) && isFinite(mine.time))
-      .sort((a, b) => a.time - b.time);
-
-    // 자동 사운드 정렬 (NaN 시간 필터링)
-    this.sortedAutos = [...autos]
-      .filter((auto) => !isNaN(auto.time) && isFinite(auto.time))
-      .sort((a, b) => a.time - b.time);
+      startOffset: config.startOffset,
+      playbackRate: config.playbackRate,
+      audioLatency: config.audioLatency,
+      judgmentOffset: config.judgmentOffset,
+      visualOffset: config.visualOffset,
+      autoplay: config.autoplay,
+    };
+    this.engine = new GameEngine(engineConfig);
   }
 
-  /**
-   * 게임 시작
-   */
+  // ── Lifecycle ────────────────────────────────────────────────────────────
+
   async start(): Promise<void> {
-    // 이미 진행 중이면 무시 (playing 또는 paused 모두 active로 간주)
     if (this._phase.kind === 'playing' || this._phase.kind === 'paused') return;
 
-    // AudioContext가 suspended 상태면 resume
     if (this.audioContext.state === 'suspended') {
       try {
         await this.audioContext.resume();
@@ -271,47 +208,39 @@ export class GameLoop {
       }
     }
 
-    // AudioContext가 closed 상태면 시작 불가
     if (this.audioContext.state === 'closed') {
       console.error('GameLoop: AudioContext is closed, cannot start');
       return;
     }
 
     this._phase = PHASE_PLAYING;
+    this.engine.start();
 
-    // AudioContext 시작 시간 기록
     this.contextStartTime = this.audioContext.currentTime;
-    this.autoIndex = 0;
-    this.lastUpdateTime = 0;
+    this.pauseTime = 0;
     this.firstTickDone = false;
 
-    // 입력 활성화
     this.inputHandler.setEnabled(true);
-
-    // 게임 루프 시작
     this.tick();
   }
 
-  /**
-   * 일시정지
-   */
   pause(): void {
     if (this._phase.kind !== 'playing') return;
 
     this._phase = PHASE_PAUSED;
+    this.engine.pause(this.getCurrentTime());
     this.pauseTime = this.getCurrentTime();
     this.inputHandler.setEnabled(false);
     cancelAnimationFrame(this.animationFrameId);
     this.keysoundPlayer.stopAll();
   }
 
-  /**
-   * 재개
-   */
   resume(): void {
     if (this._phase.kind !== 'paused') return;
 
     this._phase = PHASE_PLAYING;
+    this.engine.resume();
+
     // 일시정지된 시간만큼 시작 시간 조정
     const pauseDuration = (this.audioContext.currentTime * 1000) -
       (this.contextStartTime * 1000 + this.pauseTime);
@@ -321,23 +250,18 @@ export class GameLoop {
     this.tick();
   }
 
-  /**
-   * 정지
-   */
   stop(): void {
     this._phase = PHASE_READY;
+    this.engine.stop();
     cancelAnimationFrame(this.animationFrameId);
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
+    this.clearAutoplayTimers();
   }
 
-  /**
-   * 현재 게임 상태 (Stage 3 — discriminated union).
-   * 외부 API의 4-boolean 호환은 `getState()`/`emitUpdate()`의 derived 필드 참고.
-   */
-  get phase(): GamePhase {
-    return this._phase;
-  }
+  // ── Phase / derived getters (external API 호환) ───────────────────────────
+
+  get phase(): GamePhase { return this._phase; }
 
   /** @deprecated `phase.kind === 'playing' || phase.kind === 'paused'` 사용 권장. */
   get isPlaying(): boolean {
@@ -350,499 +274,20 @@ export class GameLoop {
   /** @deprecated `phase.kind === 'failed'` 사용 권장. */
   get isFailed(): boolean { return this._phase.kind === 'failed'; }
 
-  /**
-   * 현재 게임 시간 (ms)
-   * AudioContext.currentTime 기반으로 정확한 시간 계산
-   */
+  // ── Timing ───────────────────────────────────────────────────────────────
+
   getCurrentTime(): number {
     if (this._phase.kind !== 'playing' && this._phase.kind !== 'paused') return 0;
     if (this._phase.kind === 'paused') return this.pauseTime;
-
     const elapsed = (this.audioContext.currentTime - this.contextStartTime) * 1000;
     return (elapsed + this.startOffset) * this.playbackRate;
   }
 
-  /**
-   * 현재 비트
-   */
-  getCurrentBeat(): number {
-    const time = this.getCurrentTime() / 1000;  // 초로 변환
-    return this.notechart.secondsToBeat(time);
-  }
+  // ── Public state ─────────────────────────────────────────────────────────
 
-  /**
-   * 게임 루프 메인 틱
-   */
-  private tick = (): void => {
-    if (this._phase.kind !== 'playing') return;
-
-    // 첫 프레임에서 contextStartTime 재설정 (타이밍 점프 방지)
-    // AudioContext.resume() async 완료와 tick() 호출 사이의 시간 차이를 보정
-    // 주의: boolean 플래그 사용 — lastUpdateTime === 0 체크 시 매 프레임 리셋되는 버그 방지
-    if (!this.firstTickDone) {
-      this.contextStartTime = this.audioContext.currentTime;
-      this.firstTickDone = true;
-    }
-
-    const currentTime = this.getCurrentTime();
-
-    // 1. 자동 BGM 재생
-    this.processAutoSounds(currentTime);
-
-    // 2. 오토플레이: 노트를 자동 판정
-    if (this._autoplay) {
-      this.processAutoplayNotes(currentTime);
-    }
-
-    // 3. 미스 체크 (판정 창을 벗어난 노트 — 오토플레이 시에는 이미 처리됨)
-    this.checkMissedNotes(currentTime);
-
-    // 4. 롱노트 홀드 체크
-    this.checkActiveHolds(currentTime);
-
-    // 5. 지나간 지뢰 노트 정리
-    this.cleanupPassedLandmines(currentTime);
-
-    // 6. 상태 업데이트 콜백 (프레임 제한)
-    if (currentTime - this.lastUpdateTime >= this.UPDATE_INTERVAL) {
-      this.emitUpdate(currentTime);
-      this.lastUpdateTime = currentTime;
-    }
-
-    // 7. 완료 체크
-    if (this.pendingNotes.length === 0 && this.activeHolds.size === 0) {
-      // 모든 자동 사운드가 재생될 때까지 대기
-      if (this.autoIndex >= this.sortedAutos.length) {
-        this.complete();
-        return;
-      }
-    }
-
-    // 실패 체크
-    if (this.gauge.isFailed()) {
-      this.fail();
-      return;
-    }
-
-    // 다음 프레임 예약
-    this.animationFrameId = requestAnimationFrame(this.tick);
-  };
-
-  /**
-   * 자동 BGM 재생
-   * 오디오 레이턴시 보정: 양수면 오디오가 늦게 들리므로 일찍 재생
-   * lookahead 스케줄링: 50ms 앞의 사운드를 미리 AudioWorklet에 전달하여
-   * 샘플 단위 정확한 타이밍으로 재생
-   */
-  private processAutoSounds(currentTime: number): void {
-    // 오디오 레이턴시 보정 적용 (양수면 일찍 재생)
-    const adjustedTime = currentTime + this.audioLatency;
-    const timeInSeconds = adjustedTime / 1000;
-    // rAF 간격(~17ms)보다 넉넉한 lookahead로 사운드 사전 스케줄링
-    const LOOKAHEAD = 0.050; // 50ms
-
-    while (this.autoIndex < this.sortedAutos.length) {
-      const auto = this.sortedAutos[this.autoIndex];
-      if (auto.time > timeInSeconds + LOOKAHEAD) break;
-
-      // 키사운드 재생
-      if (auto.keysound) {
-        const offset = auto.keysoundStart ?? 0;
-        // AudioContext 시간 기준으로 정확한 재생 시점 계산
-        // getCurrentTime() = ((acTime - csTime) * 1000 + startOffset) * playbackRate
-        // → acTime = csTime + (gameTimeMs / playbackRate - startOffset) / 1000
-        const gameTimeMs = auto.time * 1000;
-        const targetContextTime = this.contextStartTime +
-          (gameTimeMs / this.playbackRate - this.startOffset) / 1000;
-        this.keysoundPlayer.play(auto.keysound, offset, targetContextTime, auto.volume);
-      }
-
-      this.autoIndex++;
-    }
-  }
-
-  /**
-   * 오토플레이: 노트 시간에 도달하면 자동으로 PGREAT 판정
-   */
-  private processAutoplayNotes(currentTime: number): void {
-    while (this.pendingNotes.length > 0) {
-      const note = this.pendingNotes[0];
-      const noteTimeMs = note.time * 1000;
-
-      // 아직 노트 시간에 도달하지 않은 경우 중단
-      if (currentTime < noteTimeMs) break;
-
-      this.pendingNotes.shift();
-
-      // 키사운드 재생
-      if (note.keysound) {
-        this.keysoundPlayer.play(note.keysound, note.keysoundStart ?? 0, 0, note.volume);
-      }
-
-      // 키 입력 시각 효과 콜백
-      this.callbacks.onKeyInput?.(note.column as KeyColumn, true);
-      // 짧은 딜레이 후 키 릴리즈 (시각적 피드백용)
-      setTimeout(() => {
-        this.callbacks.onKeyInput?.(note.column as KeyColumn, false);
-      }, 50);
-
-      // 롱노트는 활성화 (끝점은 checkActiveHolds에서 자동 처리)
-      if (note.end) {
-        this.activeHolds.set(note.column as KeyColumn, note);
-      }
-
-      // PGREAT 판정 (오프셋 0)
-      this.onNoteJudgment(note, 'PGREAT', 0);
-    }
-  }
-
-  /**
-   * 미스된 노트 체크
-   */
-  private checkMissedNotes(currentTime: number): void {
-    // 판정 오프셋 적용
-    const adjustedTime = currentTime + this.judgmentOffset;
-
-    while (this.pendingNotes.length > 0) {
-      const note = this.pendingNotes[0];
-
-      // 아직 판정 가능한 노트면 중단
-      if (!this.judgment.isMissed(adjustedTime, note.time * 1000)) {
-        break;
-      }
-
-      // 미스 처리 - BMS 표준: 미스된 노트의 키음도 자동 재생
-      this.pendingNotes.shift();
-      if (note.keysound) {
-        this.keysoundPlayer.play(note.keysound, note.keysoundStart ?? 0, 0, note.volume);
-      }
-      this.onNoteJudgment(note, 'MISS', 0);
-
-      // 롱노트인 경우 끝점도 미스
-      if (note.end) {
-        this.onNoteJudgment(note, 'MISS', 0);
-      }
-    }
-  }
-
-  /**
-   * 활성 롱노트 홀드 체크
-   */
-  private checkActiveHolds(currentTime: number): void {
-    // 판정 오프셋 적용
-    const adjustedTime = currentTime + this.judgmentOffset;
-
-    for (const [column, note] of this.activeHolds) {
-      if (!note.end) continue;
-
-      // 오토플레이가 아닌 경우: 키를 떼고 있으면 POOR
-      if (!this._autoplay && !this.inputHandler.isHeld(column)) {
-        this.activeHolds.delete(column);
-        this.onNoteJudgment(note, 'POOR', 0);
-        continue;
-      }
-
-      // 끝점 시간 도달
-      if (adjustedTime >= note.end.time * 1000 - this.judgment.getWindows().great) {
-        this.activeHolds.delete(column);
-        // 끝점은 홀드 성공 시 GREAT 보장
-        this.onNoteJudgment(note, 'GREAT', 0);
-      }
-    }
-  }
-
-  /**
-   * 키다운 핸들러
-   */
-  private handleKeyDown = (input: KeyInput): void => {
-    if (this._phase.kind !== 'playing' || this._autoplay) return;
-
-    const { column } = input;
-
-    // 콜백
-    this.callbacks.onKeyInput?.(column, true);
-
-    // 게임 시간 계산
-    const gameTime = this.getCurrentTime();
-
-    // 해당 컬럼의 가장 가까운 노트 찾기
-    const noteIndex = this.findClosestNote(column, gameTime);
-    if (noteIndex === -1) {
-      // 빈타 - 노트가 없으면 지뢰 체크
-      this.checkLandmine(column, gameTime);
-      return;
-    }
-
-    const note = this.pendingNotes[noteIndex];
-
-    // 판정 (판정 오프셋 적용)
-    const adjustedGameTime = gameTime + this.judgmentOffset;
-    const result = this.judgment.judge(adjustedGameTime, note.time * 1000);
-
-    // 노트 제거
-    this.pendingNotes.splice(noteIndex, 1);
-
-    // 키사운드 재생 (볼륨 적용)
-    if (note.keysound) {
-      this.keysoundPlayer.play(note.keysound, note.keysoundStart ?? 0, 0, note.volume);
-    }
-
-    // 롱노트 시작이면 활성화
-    if (note.end) {
-      if (result.judgment !== 'BAD' && result.judgment !== 'POOR') {
-        this.activeHolds.set(column, note);
-      } else {
-        // 롱노트 시작을 놓치면 끝점도 실패
-        this.onNoteJudgment(note, result.judgment, result.offset);
-        this.onNoteJudgment(note, 'MISS', 0);
-        return;
-      }
-    }
-
-    this.onNoteJudgment(note, result.judgment, result.offset);
-  };
-
-  /**
-   * 키업 핸들러
-   */
-  private handleKeyUp = (input: KeyInput): void => {
-    if (this._phase.kind !== 'playing' || this._autoplay) return;
-
-    const { column } = input;
-
-    // 콜백
-    this.callbacks.onKeyInput?.(column, false);
-
-    // 활성 롱노트 확인
-    const note = this.activeHolds.get(column);
-    if (!note || !note.end) return;
-
-    const gameTime = this.getCurrentTime();
-    const endTime = note.end.time * 1000;
-
-    // 끝점 판정 (판정 오프셋 적용)
-    const adjustedGameTime = gameTime + this.judgmentOffset;
-    const result = this.judgment.judge(adjustedGameTime, endTime);
-
-    this.activeHolds.delete(column);
-    this.onNoteJudgment(note, result.judgment, result.offset);
-  };
-
-  /**
-   * 가장 가까운 노트 찾기
-   */
-  private findClosestNote(column: KeyColumn, currentTime: number): number {
-    let closestIndex = -1;
-    let closestDistance = Infinity;
-
-    // 판정 오프셋 적용
-    const adjustedTime = currentTime + this.judgmentOffset;
-
-    for (let i = 0; i < this.pendingNotes.length; i++) {
-      const note = this.pendingNotes[i];
-      if (note.column !== column) continue;
-
-      const noteTime = note.time * 1000;
-      const distance = Math.abs(adjustedTime - noteTime);
-
-      // 판정 범위 내인지 확인
-      if (!this.judgment.isInJudgmentRange(adjustedTime, noteTime)) continue;
-
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestIndex = i;
-      }
-    }
-
-    return closestIndex;
-  }
-
-  /**
-   * 지뢰 노트 체크 - 키 입력 시 근처 지뢰가 있으면 트리거
-   * 지뢰 판정 윈도우는 BAD 윈도우와 동일 (약 200ms)
-   */
-  private checkLandmine(column: KeyColumn, currentTime: number): void {
-    const adjustedTime = currentTime + this.judgmentOffset;
-    const mineWindow = this.judgment.getWindows().bad;
-
-    for (let i = 0; i < this.pendingLandmines.length; i++) {
-      const mine = this.pendingLandmines[i];
-      if (mine.column !== column) continue;
-
-      const mineTime = mine.time * 1000;
-      const distance = Math.abs(adjustedTime - mineTime);
-
-      if (distance <= mineWindow) {
-        // 지뢰 트리거!
-        this.pendingLandmines.splice(i, 1);
-
-        // 고정 데미지 5% (BMSNote.damage가 GameNote에 전파되지 않으므로)
-        const damage = 5;
-        this.gauge.applyDamage(damage);
-
-        // 콜백
-        this.callbacks.onLandmineTrigger?.({
-          mineId: mine.id,
-          column,
-          damage,
-          time: currentTime,
-        });
-        return;
-      }
-
-      // 이미 지나간 지뢰는 건너뛰기 (시간순 정렬이므로)
-      if (mineTime < adjustedTime - mineWindow) continue;
-      // 아직 도달하지 않은 지뢰도 윈도우 밖이면 종료
-      if (mineTime > adjustedTime + mineWindow) break;
-    }
-  }
-
-  /**
-   * 지나간 지뢰 노트 정리 (판정선을 지나면 안전하게 제거)
-   */
-  private cleanupPassedLandmines(currentTime: number): void {
-    const adjustedTime = currentTime + this.judgmentOffset;
-    const mineWindow = this.judgment.getWindows().bad;
-
-    while (this.pendingLandmines.length > 0) {
-      const mine = this.pendingLandmines[0];
-      if (adjustedTime - mine.time * 1000 > mineWindow) {
-        this.pendingLandmines.shift();
-      } else {
-        break;
-      }
-    }
-  }
-
-  /**
-   * 노트 판정 처리
-   */
-  private onNoteJudgment(note: GameNote, judgment: Judgment, offset: number): void {
-    // 스코어/게이지 업데이트
-    this.score.onJudgment(judgment, offset);
-    this.gauge.onJudgment(judgment);
-
-    // 타이밍 오프셋 기록 (MISS 제외 - 실제 입력이 아님)
-    if (judgment !== 'MISS' && offset !== 0) {
-      this.recentOffsets.push(offset);
-      if (this.recentOffsets.length > this.MAX_RECENT_OFFSETS) {
-        this.recentOffsets.shift();
-      }
-      this.recentOffsetsDirty = true;
-    }
-
-    // 콜백
-    this.callbacks.onJudgment?.({
-      noteId: note.id,
-      column: note.column as KeyColumn,
-      judgment,
-      offset,
-      time: this.getCurrentTime(),
-    });
-  }
-
-  /**
-   * 상태 업데이트 이벤트 발생
-   */
-  private emitUpdate(currentTime: number): void {
-    // 진행 중인 롱노트 ID 세트 생성
-    const activeHoldNoteIds = new Set<number>();
-    for (const note of this.activeHolds.values()) {
-      activeHoldNoteIds.add(note.id);
-    }
-
-    // currentTime 파라미터에서 직접 비트 계산 (getCurrentBeat()는 phase 의존)
-    const currentBeat = this.notechart.secondsToBeat(currentTime / 1000);
-
-    const flags = gamePhaseToFlags(this._phase);
-    const state: GameLoopState = {
-      phase: this._phase,
-      isPlaying: flags.isPlaying,
-      isPaused: flags.isPaused,
-      isFailed: flags.isFailed,
-      isCompleted: flags.isCompleted,
-      currentTime,
-      visualTime: currentTime + this.visualOffset,
-      currentBeat,
-      combo: this.score.currentCombo,
-      gaugeValue: this.gauge.getValue(),
-      exScore: this.score.exScore,
-      lastJudgment: this.score.lastJudgment,
-      lastOffset: this.score.lastOffset,
-      activeHoldNoteIds,
-      // 판정 카운트
-      pgreatCount: this.score.pgreatCount,
-      greatCount: this.score.greatCount,
-      goodCount: this.score.goodCount,
-      badCount: this.score.badCount,
-      poorCount: this.score.poorCount,
-      missCount: this.score.missCount,
-      maxCombo: this.score.maxCombo,
-      // 타이밍 오프셋 기록 (변경 시에만 새 배열 생성)
-      recentOffsets: this.getRecentOffsetsSnapshot(),
-    };
-
-    this.callbacks.onUpdate?.(state);
-  }
-
-  /**
-   * recentOffsets 스냅샷 반환 (변경 시에만 새 배열 생성)
-   */
-  private getRecentOffsetsSnapshot(): number[] {
-    if (this.recentOffsetsDirty) {
-      this.recentOffsetsSnapshot = [...this.recentOffsets];
-      this.recentOffsetsDirty = false;
-    }
-    return this.recentOffsetsSnapshot;
-  }
-
-  /**
-   * 게임 완료
-   */
-  private complete(): void {
-    // 상태 변경 전에 현재 시간 캡처 (phase=completed 이후 getCurrentTime()이 0 반환)
-    const finalTime = this.getCurrentTime();
-
-    this._phase = PHASE_COMPLETED;
-    cancelAnimationFrame(this.animationFrameId);
-    this.inputHandler.setEnabled(false);
-
-    // React에 최종 상태 전달 (phase=completed)
-    this.emitUpdate(finalTime);
-
-    this.callbacks.onComplete?.(this.score.getState());
-  }
-
-  /**
-   * 게임 실패
-   */
-  private fail(): void {
-    // 상태 변경 전에 현재 시간 캡처 (phase=failed 이후 getCurrentTime()이 0 반환)
-    const finalTime = this.getCurrentTime();
-
-    this._phase = PHASE_FAILED;
-    cancelAnimationFrame(this.animationFrameId);
-    this.inputHandler.setEnabled(false);
-    this.keysoundPlayer.stopAll();
-
-    // React에 최종 상태 전달 (phase=failed)
-    this.emitUpdate(finalTime);
-
-    this.callbacks.onFailed?.(this.score.getState());
-  }
-
-  /**
-   * 현재 상태 반환
-   */
   getState(): GameLoopState {
     const currentTime = this.getCurrentTime();
-
-    // 진행 중인 롱노트 ID 세트 생성
-    const activeHoldNoteIds = new Set<number>();
-    for (const note of this.activeHolds.values()) {
-      activeHoldNoteIds.add(note.id);
-    }
-
+    const engineState = this.engine.buildState(currentTime);
     const flags = gamePhaseToFlags(this._phase);
     return {
       phase: this._phase,
@@ -851,37 +296,244 @@ export class GameLoop {
       isFailed: flags.isFailed,
       isCompleted: flags.isCompleted,
       currentTime,
-      visualTime: currentTime + this.visualOffset,
-      currentBeat: this.getCurrentBeat(),
-      combo: this.score.currentCombo,
-      gaugeValue: this.gauge.getValue(),
-      exScore: this.score.exScore,
-      lastJudgment: this.score.lastJudgment,
-      lastOffset: this.score.lastOffset,
-      activeHoldNoteIds,
-      // 판정 카운트
-      pgreatCount: this.score.pgreatCount,
-      greatCount: this.score.greatCount,
-      goodCount: this.score.goodCount,
-      badCount: this.score.badCount,
-      poorCount: this.score.poorCount,
-      missCount: this.score.missCount,
-      maxCombo: this.score.maxCombo,
-      // 타이밍 오프셋 기록
-      recentOffsets: this.getRecentOffsetsSnapshot(),
+      visualTime: engineState.visualTime,
+      currentBeat: engineState.currentBeat,
+      combo: engineState.combo,
+      gaugeValue: engineState.gaugeValue,
+      exScore: engineState.exScore,
+      lastJudgment: engineState.lastJudgment,
+      lastOffset: engineState.lastOffset,
+      activeHoldNoteIds: engineState.activeHoldNoteIds,
+      pgreatCount: engineState.pgreatCount,
+      greatCount: engineState.greatCount,
+      goodCount: engineState.goodCount,
+      badCount: engineState.badCount,
+      poorCount: engineState.poorCount,
+      missCount: engineState.missCount,
+      maxCombo: engineState.maxCombo,
+      recentOffsets: engineState.recentOffsets,
     };
   }
 
-  /**
-   * 스코어 상태 반환
-   */
   getScoreState(): ScoreState {
-    return this.score.getState();
+    return this.engine.getScoreState();
   }
 
-  /**
-   * 리소스 정리
-   */
+  // ── Main tick ─────────────────────────────────────────────────────────────
+
+  private tick = (): void => {
+    if (this._phase.kind !== 'playing') return;
+
+    // 첫 프레임: contextStartTime 재설정 (타이밍 점프 방지)
+    if (!this.firstTickDone) {
+      this.contextStartTime = this.audioContext.currentTime;
+      this.firstTickDone = true;
+    }
+
+    const currentTime = this.getCurrentTime();
+
+    // GameEngine에 틱 위임 → 커맨드 수신
+    const result = this.engine.tick(currentTime);
+
+    // ── 사이드 이펙트 실행 ──────────────────────────────────────────────────
+
+    // 1. 사운드 재생
+    for (const cmd of result.sounds) {
+      if (cmd.type === 'playSound') {
+        let targetContextTime = 0;
+        if (cmd.gameTimeMs > 0) {
+          // 스케줄링된 BGM: AudioContext 절대 시간으로 변환
+          targetContextTime = this.contextStartTime +
+            (cmd.gameTimeMs / this.playbackRate - this.startOffset) / 1000;
+        }
+        this.keysoundPlayer.play(cmd.keysound, cmd.offset, targetContextTime, cmd.volume);
+      }
+    }
+
+    // 2. 판정 콜백
+    for (const ev of result.judgments) {
+      this.callbacks.onJudgment?.(ev);
+    }
+
+    // 3. 지뢰 콜백
+    for (const ev of result.landmines) {
+      this.callbacks.onLandmineTrigger?.(ev);
+    }
+
+    // 4. 키 입력 콜백 (오토플레이 key-press)
+    for (const ki of result.keyInputs) {
+      this.callbacks.onKeyInput?.(ki.column, ki.held);
+      // 오토플레이: press 이후 짧은 시간 후 release 시뮬레이션
+      if (ki.held) {
+        const timer = setTimeout(() => {
+          this.callbacks.onKeyInput?.(ki.column, false);
+        }, 50);
+        this.autoplayReleaseTimers.push(timer);
+      }
+    }
+
+    // 5. 상태 업데이트
+    if (result.state) {
+      const flags = gamePhaseToFlags(this._phase);
+      const loopState: GameLoopState = {
+        phase: this._phase,
+        isPlaying: flags.isPlaying,
+        isPaused: flags.isPaused,
+        isFailed: flags.isFailed,
+        isCompleted: flags.isCompleted,
+        currentTime,
+        visualTime: result.state.visualTime,
+        currentBeat: result.state.currentBeat,
+        combo: result.state.combo,
+        gaugeValue: result.state.gaugeValue,
+        exScore: result.state.exScore,
+        lastJudgment: result.state.lastJudgment,
+        lastOffset: result.state.lastOffset,
+        activeHoldNoteIds: result.state.activeHoldNoteIds,
+        pgreatCount: result.state.pgreatCount,
+        greatCount: result.state.greatCount,
+        goodCount: result.state.goodCount,
+        badCount: result.state.badCount,
+        poorCount: result.state.poorCount,
+        missCount: result.state.missCount,
+        maxCombo: result.state.maxCombo,
+        recentOffsets: result.state.recentOffsets,
+      };
+      this.callbacks.onUpdate?.(loopState);
+    }
+
+    // 6. 완료 / 실패 처리
+    if (result.completed) {
+      this.handleComplete(result.completed, currentTime);
+      return;
+    }
+    if (result.failed) {
+      this.handleFailed(result.failed, currentTime);
+      return;
+    }
+
+    // 다음 프레임 예약
+    this.animationFrameId = requestAnimationFrame(this.tick);
+  };
+
+  // ── Input handlers ────────────────────────────────────────────────────────
+
+  private handleKeyDown = (input: KeyInput): void => {
+    const currentTime = this.getCurrentTime();
+    const result = this.engine.handleKeyDown(input.column, currentTime);
+
+    // 사이드 이펙트 실행
+    for (const cmd of result.sounds) {
+      if (cmd.type === 'playSound') {
+        this.keysoundPlayer.play(cmd.keysound, cmd.offset, 0, cmd.volume);
+      }
+    }
+    for (const ev of result.judgments) {
+      this.callbacks.onJudgment?.(ev);
+    }
+    for (const ev of result.landmines) {
+      this.callbacks.onLandmineTrigger?.(ev);
+    }
+    for (const ki of result.keyInputs) {
+      this.callbacks.onKeyInput?.(ki.column, ki.held);
+    }
+  };
+
+  private handleKeyUp = (input: KeyInput): void => {
+    const currentTime = this.getCurrentTime();
+    const result = this.engine.handleKeyUp(input.column, currentTime);
+
+    for (const ev of result.judgments) {
+      this.callbacks.onJudgment?.(ev);
+    }
+    for (const ki of result.keyInputs) {
+      this.callbacks.onKeyInput?.(ki.column, ki.held);
+    }
+  };
+
+  // ── Terminal states ───────────────────────────────────────────────────────
+
+  private handleComplete(score: ScoreState, finalTime: number): void {
+    this._phase = PHASE_COMPLETED;
+    cancelAnimationFrame(this.animationFrameId);
+    this.inputHandler.setEnabled(false);
+    this.clearAutoplayTimers();
+
+    // 최종 상태 전달
+    const engineState = this.engine.buildState(finalTime);
+    const flags = gamePhaseToFlags(this._phase);
+    this.callbacks.onUpdate?.({
+      phase: this._phase,
+      isPlaying: flags.isPlaying,
+      isPaused: flags.isPaused,
+      isFailed: flags.isFailed,
+      isCompleted: flags.isCompleted,
+      currentTime: finalTime,
+      visualTime: engineState.visualTime,
+      currentBeat: engineState.currentBeat,
+      combo: engineState.combo,
+      gaugeValue: engineState.gaugeValue,
+      exScore: engineState.exScore,
+      lastJudgment: engineState.lastJudgment,
+      lastOffset: engineState.lastOffset,
+      activeHoldNoteIds: engineState.activeHoldNoteIds,
+      pgreatCount: engineState.pgreatCount,
+      greatCount: engineState.greatCount,
+      goodCount: engineState.goodCount,
+      badCount: engineState.badCount,
+      poorCount: engineState.poorCount,
+      missCount: engineState.missCount,
+      maxCombo: engineState.maxCombo,
+      recentOffsets: engineState.recentOffsets,
+    });
+    this.callbacks.onComplete?.(score);
+  }
+
+  private handleFailed(score: ScoreState, finalTime: number): void {
+    this._phase = PHASE_FAILED;
+    cancelAnimationFrame(this.animationFrameId);
+    this.inputHandler.setEnabled(false);
+    this.keysoundPlayer.stopAll();
+    this.clearAutoplayTimers();
+
+    const engineState = this.engine.buildState(finalTime);
+    const flags = gamePhaseToFlags(this._phase);
+    this.callbacks.onUpdate?.({
+      phase: this._phase,
+      isPlaying: flags.isPlaying,
+      isPaused: flags.isPaused,
+      isFailed: flags.isFailed,
+      isCompleted: flags.isCompleted,
+      currentTime: finalTime,
+      visualTime: engineState.visualTime,
+      currentBeat: engineState.currentBeat,
+      combo: engineState.combo,
+      gaugeValue: engineState.gaugeValue,
+      exScore: engineState.exScore,
+      lastJudgment: engineState.lastJudgment,
+      lastOffset: engineState.lastOffset,
+      activeHoldNoteIds: engineState.activeHoldNoteIds,
+      pgreatCount: engineState.pgreatCount,
+      greatCount: engineState.greatCount,
+      goodCount: engineState.goodCount,
+      badCount: engineState.badCount,
+      poorCount: engineState.poorCount,
+      missCount: engineState.missCount,
+      maxCombo: engineState.maxCombo,
+      recentOffsets: engineState.recentOffsets,
+    });
+    this.callbacks.onFailed?.(score);
+  }
+
+  // ── Cleanup ───────────────────────────────────────────────────────────────
+
+  private clearAutoplayTimers(): void {
+    for (const t of this.autoplayReleaseTimers) {
+      clearTimeout(t);
+    }
+    this.autoplayReleaseTimers = [];
+  }
+
   dispose(): void {
     this.stop();
     this.inputHandler.dispose();
