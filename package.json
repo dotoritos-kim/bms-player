@@ -21,6 +21,16 @@
       "types": "./dist/audio/index.d.ts",
       "import": "./dist/audio/index.js",
       "require": "./dist/audio/index.cjs"
+    },
+    "./workers/audio-scheduler": {
+      "types": "./dist/game/AudioSchedulerWorker.d.ts",
+      "import": "./dist/game/AudioSchedulerWorker.js",
+      "require": "./dist/game/AudioSchedulerWorker.cjs"
+    },
+    "./workers/game-loop": {
+      "types": "./dist/game/GameLoopWorker.d.ts",
+      "import": "./dist/game/GameLoopWorker.js",
+      "require": "./dist/game/GameLoopWorker.cjs"
     }
   },
   "files": [
