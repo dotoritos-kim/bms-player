@@ -1,0 +1,43 @@
+/**
+ * English fallback messages for `@rhythm-archive/bms-player`.
+ *
+ * Smaller surface than bms-editor — the player has fewer user-visible
+ * strings (mostly judgment labels, gauge state, error messages).
+ */
+
+export const defaultMessages = {
+  judgment: {
+    pgreat: 'PGREAT',
+    great: 'GREAT',
+    good: 'GOOD',
+    bad: 'BAD',
+    poor: 'POOR',
+    miss: 'MISS',
+    early: 'EARLY',
+    late: 'LATE',
+  },
+  gauge: {
+    cleared: 'CLEARED',
+    failed: 'FAILED',
+  },
+  hud: {
+    bpm: 'BPM',
+    score: 'Score',
+    combo: 'Combo',
+    accuracy: 'Accuracy',
+  },
+  errors: {
+    audioLoadFailed: 'Failed to load audio',
+    decodeFailed: 'Audio decode failed',
+    keysoundMissing: 'Missing keysound: {{name}}',
+  },
+  state: {
+    ready: 'Ready',
+    playing: 'Playing',
+    paused: 'Paused',
+    completed: 'Completed',
+    failed: 'Failed',
+  },
+} as const;
+
+export type BmsPlayerMessages = typeof defaultMessages;
