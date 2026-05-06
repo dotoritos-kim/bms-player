@@ -144,6 +144,10 @@ export type {
 // KeysoundPlayer interface kept for backward compatibility (consumers may reference it)
 export type { KeysoundPlayer as KeysoundPlayerInterface } from './types/KeysoundPlayer';
 
+// ============ i18n ============
+export { I18nProvider, useI18n, fallbackTranslate, defaultMessages } from './i18n';
+export type { BmsPlayerMessages, BmsPlayerI18nKey, I18nProviderValue, Translator } from './i18n';
+
 // Stage 3 — GamePhase 통합 상태 (REFACTOR-PLAN §6.2). 신규 컨슈머용 노출.
 export type { GamePhase, GamePhaseKind } from './types/GamePhase';
 export {
