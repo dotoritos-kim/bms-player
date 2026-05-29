@@ -245,7 +245,7 @@ export class Notechart {
                     const index = columnsToShift.indexOf(note.column);
                     if (index > -1) {
                         const newIndex = index + amount;
-                        invariant(newIndex < columnsToShift.length, '이상합니다. 열은 사용 가능한 열을 초과하여 이동할 수 없습니다.');
+                        invariant(newIndex < columnsToShift.length, 'Unexpected: column shift exceeds available columns.');
                         const newColumn = columnsToShift[newIndex];
                         return Object.assign({}, note, { column: newColumn });
                     }
