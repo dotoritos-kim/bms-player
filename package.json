@@ -41,7 +41,9 @@
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "peerDependencies": {
     "@react-three/fiber": ">=8.0.0",
@@ -56,13 +58,14 @@
     "lodash": "^4.17.21"
   },
   "devDependencies": {
-    "@react-three/drei": "^9.0.0",
+    "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.5.0",
     "@rhythm-archive/bms-core": "file:../bms-core",
     "@types/lodash": "^4.17.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.170.0",
+    "prettier": "^3.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.170.0",
