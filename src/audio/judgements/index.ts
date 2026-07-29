@@ -246,7 +246,7 @@ export class Notechart {
                     const index = columnsToShift.indexOf(note.column);
                     if (index > -1) {
                         const newIndex = index + amount;
-                        invariant(newIndex < columnsToShift.length, 'Unexpected: column shift exceeds the available column count.');
+                        invariant(newIndex < columnsToShift.length, 'Unexpected: column shift exceeds available columns.');
                         const newColumn = columnsToShift[newIndex];
                         return Object.assign({}, note, { column: newColumn });
                     }
