@@ -22,8 +22,7 @@
  * ```
  */
 
-import { AudioProcessorWorkletUrl } from './AudioProcessor.worklet';
-import type { LoaderOutbound, FileMap } from './messages';
+import type { FileMap } from './messages';
 import { AudioBufferStore } from '../pipeline/AudioBufferStore';
 import { AudioDecoder } from '../pipeline/AudioDecoder';
 import { EffectChain } from '../pipeline/EffectChain';

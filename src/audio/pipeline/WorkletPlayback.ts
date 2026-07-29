@@ -62,7 +62,7 @@ export class WorkletPlayback {
 
         if (this.ctx.state === 'suspended') await this.ctx.resume();
 
-        const { trackId, leftData, rightData, transferList, isStereo } =
+        const { trackId, leftData, rightData, transferList } =
             this._preparePlayData(key, audioBuffer, uniquePlay);
 
         this._post<AudioProcessorPostMessage>(
@@ -92,7 +92,7 @@ export class WorkletPlayback {
 
         if (this.ctx.state === 'suspended') void this.ctx.resume();
 
-        const { trackId, leftData, rightData, transferList, isStereo } =
+        const { trackId, leftData, rightData, transferList } =
             this._preparePlayData(key, audioBuffer, uniquePlay);
 
         this._post<AudioProcessorPostMessage>(

@@ -8,12 +8,8 @@
 import { describe, it, expect } from 'vitest';
 import {
     BMSParser,
-    Notes,
-    Timing,
-    KeySounds,
     Positioning,
     Spacing,
-    SongInfo,
 } from '@rhythm-archive/bms-core';
 import { Notechart, NotechartInput } from '../src/audio/judgements';
 

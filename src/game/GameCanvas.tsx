@@ -96,7 +96,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
       gameState,
       hiSpeed = 1,
       heldKeys = new Set(),
-      lastJudgmentEvent = null,
+      lastJudgmentEvent: _lastJudgmentEvent = null,
       judgmentQueue = [],
       width = 400,
       height = 700,

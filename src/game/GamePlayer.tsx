@@ -62,8 +62,8 @@ const LoadingScreen: React.FC<{ message?: string }> = ({ message = 'Loading...' 
   </div>
 );
 
-/** Ready-to-start screen */
-const ReadyScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
+/** Ready-to-start screen (currently unused — kept for future wiring) */
+const _ReadyScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
   <div
     style={{
       position: 'absolute',

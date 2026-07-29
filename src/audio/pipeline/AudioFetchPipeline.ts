@@ -10,7 +10,6 @@
 
 import type { LoaderOutbound, FileMap } from '../loader/messages';
 import { audioIndexedDBCache } from '../cache';
-import type { AudioDecoder } from './AudioDecoder';
 
 function makeIndexedDBKey(baseUrl: string, filename: string): string {
     return `${baseUrl}/${filename}`;

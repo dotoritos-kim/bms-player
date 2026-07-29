@@ -6,7 +6,6 @@
  */
 
 import React from 'react';
-import { useFrame } from '@react-three/fiber';
 import type { KeyColumn } from '../InputHandler';
 import type { LaneConfig } from './laneConfig';
 

@@ -223,7 +223,7 @@ export class Notechart {
      *   actual key-mode detection.
      * @returns {string} key mode ('4K' through '48K').
      */
-    getKeyMode(scratch?: string): string {
+    getKeyMode(_scratch?: string): string {
         return detectKeyModeFromColumns(this.notes.map(n => n.column));
     }
 

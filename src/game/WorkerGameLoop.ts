@@ -18,8 +18,7 @@ import {
 } from '../types/GamePhase';
 import type { KeyColumn } from './InputHandler';
 import { InputHandler } from './InputHandler';
-import type { GameLoopState, GameLoopCallbacks, JudgmentEvent, LandmineEvent } from './GameLoop';
-import type { ScoreState } from './ScoreManager';
+import type { GameLoopState, GameLoopCallbacks } from './GameLoop';
 import type {
   MainToWorkerMessage,
   WorkerToMainMessage,

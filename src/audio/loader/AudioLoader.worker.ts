@@ -11,7 +11,7 @@
  * ```
  */
 
-import type { FileMap, LoaderInbound } from './messages';
+import type { LoaderInbound } from './messages';
 import { postFromLoaderWorker } from './messages';
 
 // Browser concurrent-connection limit (usually 6).
