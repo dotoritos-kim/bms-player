@@ -1,8 +1,8 @@
 /**
- * GameEngine - 순수 게임 로직 (환경 무관)
+ * GameEngine - Pure game logic (environment agnostic).
  *
- * GameLoop(Main Thread rAF)과 WorkerGameLoop(Worker) 모두에서 사용.
- * 사이드 이펙트 없이 커맨드를 반환하여 호출자가 실행.
+ * Used by both GameLoop (Main Thread rAF) and WorkerGameLoop (Worker).
+ * Returns commands with no side effects; the caller executes them.
  */
 
 import type { INotechart, GameNote, SoundedEvent } from '../audio/judgements';
@@ -37,15 +37,15 @@ export interface GameEngineConfig {
 }
 
 export interface GameEngineState {
-  /** 통합 게임 상태(Stage 3, REFACTOR-PLAN §6.2). 신규 컨슈머는 이 필드를 우선 사용. */
+  /** Unified game state (Stage 3, REFACTOR-PLAN §6.2). New consumers should prefer this field. */
   phase: GamePhase;
-  /** @deprecated `phase`로부터 derive. */
+  /** @deprecated Derived from `phase`. */
   isPlaying: boolean;
-  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'paused'`. */
   isPaused: boolean;
-  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'failed'`. */
   isFailed: boolean;
-  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'completed'`. */
   isCompleted: boolean;
   currentTime: number;
   visualTime: number;
@@ -134,7 +134,7 @@ export class GameEngine {
   private judgmentOffset: number;
   private visualOffset: number;
 
-  // State (Stage 3 — discriminated union; legacy 4-boolean은 derived getter)
+  // State (Stage 3 — discriminated union; the legacy 4 booleans are derived getters)
   private _phase: GamePhase = PHASE_READY;
 
   // Note tracking
@@ -239,17 +239,17 @@ export class GameEngine {
     this._phase = PHASE_READY;
   }
 
-  /** Stage 3 — discriminated union 우선 노출. */
+  /** Stage 3 — exposes the discriminated union as the primary API. */
   get phase(): GamePhase { return this._phase; }
-  /** @deprecated `phase.kind === 'playing' || phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'playing' || phase.kind === 'paused'`. */
   get isPlaying(): boolean {
     return this._phase.kind === 'playing' || this._phase.kind === 'paused';
   }
-  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'paused'`. */
   get isPaused(): boolean { return this._phase.kind === 'paused'; }
-  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'completed'`. */
   get isCompleted(): boolean { return this._phase.kind === 'completed'; }
-  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'failed'`. */
   get isFailed(): boolean { return this._phase.kind === 'failed'; }
 
   // ==================== Main Tick ====================

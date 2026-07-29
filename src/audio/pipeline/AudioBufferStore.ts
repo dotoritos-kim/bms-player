@@ -1,13 +1,13 @@
 /**
  * AudioBufferStore.ts
  *
- * AudioBuffer 의 메모리 캐시(LRU) 관리를 담당한다.
- * - 글로벌 LRU Map(globalAudioBufferCache) 래핑
- * - 인스턴스별 prefix 격리
- * - AudioBuffer 저장/조회/해제
+ * Manages the in-memory (LRU) cache of AudioBuffers.
+ * - Wraps the global LRU Map (globalAudioBufferCache).
+ * - Per-instance prefix isolation.
+ * - AudioBuffer store/lookup/release.
  */
 
-// ---- 글로벌 LRU 캐시 (인스턴스 간 공유, 선택적 사용) ----
+// ---- Global LRU cache (shared across instances, opt-in) ----
 const globalAudioBufferCache = new Map<string, AudioBuffer>();
 const CACHE_MAX_SIZE = 500;
 
@@ -22,17 +22,17 @@ function addToGlobalCache(key: string, buffer: AudioBuffer): void {
 function getFromGlobalCache(key: string): AudioBuffer | undefined {
     const buffer = globalAudioBufferCache.get(key);
     if (buffer) {
-        // LRU: 최근 사용된 항목을 끝으로 이동
+        // LRU: move the most recently used entry to the end.
         globalAudioBufferCache.delete(key);
         globalAudioBufferCache.set(key, buffer);
     }
     return buffer;
 }
 
-// ---- AudioBufferStore 클래스 ----
+// ---- AudioBufferStore class ----
 
 export class AudioBufferStore {
-    /** 로컬(인스턴스) 버퍼 맵 */
+    /** Local (per-instance) buffer map. */
     private readonly localBuffers = new Map<string, AudioBuffer>();
     private readonly cachePrefix: string;
     private readonly useGlobalCache: boolean;
@@ -46,7 +46,7 @@ export class AudioBufferStore {
         return `${this.cachePrefix}:${key}`;
     }
 
-    /** 버퍼 저장 (로컬 + 글로벌 캐시) */
+    /** Stores a buffer (local + global cache). */
     set(key: string, buffer: AudioBuffer): void {
         this.localBuffers.set(key, buffer);
         if (this.useGlobalCache) {
@@ -54,14 +54,14 @@ export class AudioBufferStore {
         }
     }
 
-    /** 버퍼 조회. 로컬 → 글로벌 캐시 순서 */
+    /** Looks up a buffer. Local first, then the global cache. */
     get(key: string): AudioBuffer | undefined {
         const local = this.localBuffers.get(key);
         if (local) return local;
         if (this.useGlobalCache) {
             const cached = getFromGlobalCache(this.globalKey(key));
             if (cached) {
-                // 로컬에도 올려둠
+                // Promote it to the local map too.
                 this.localBuffers.set(key, cached);
                 return cached;
             }
@@ -78,7 +78,7 @@ export class AudioBufferStore {
         return this.localBuffers.size;
     }
 
-    /** 인스턴스 소유 캐시 전체 해제 */
+    /** Releases every cache entry owned by this instance. */
     clear(): void {
         if (this.useGlobalCache) {
             const prefix = `${this.cachePrefix}:`;
@@ -89,7 +89,7 @@ export class AudioBufferStore {
         this.localBuffers.clear();
     }
 
-    /** 저장된 모든 키 순회 */
+    /** Iterates over all stored keys. */
     keys(): IterableIterator<string> {
         return this.localBuffers.keys();
     }

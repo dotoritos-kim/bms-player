@@ -1,8 +1,8 @@
 /**
- * EffectLayer — 히트 이펙트 · 커버 · UI 오버레이
- * S10 (REFACTOR-PLAN §9): GameCanvas.tsx Composite 패턴 분리
+ * EffectLayer — Hit effects, covers, and UI overlay.
+ * S10 (REFACTOR-PLAN §9): split out of GameCanvas.tsx via the Composite pattern.
  *
- * 책임: 히트 이펙트(ref 기반), Sudden+/Lift+ 커버, Early/Late HUD
+ * Responsibilities: hit effects (ref based), Sudden+/Lift+ covers, Early/Late HUD.
  */
 
 import React, { useRef, useMemo } from 'react';
@@ -14,7 +14,7 @@ import type { Judgment } from '../JudgmentEngine';
 import { JUDGMENT_LINE_Y } from './LaneLayer';
 import type { LaneConfig } from './laneConfig';
 
-// ── 상수 ─────────────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────
 
 const MAX_LANES = 52;
 
@@ -27,7 +27,7 @@ const JUDGMENT_COLORS: Record<Judgment, number> = {
   MISS:   0x888888,
 };
 
-// ── 히트 이펙트 ───────────────────────────────────────────────────────────
+// ── Hit effects ──────────────────────────────────────────────────────────
 
 interface LaneEffectState {
   active: boolean;
@@ -148,7 +148,7 @@ export const HitEffectsManager = React.forwardRef<HitEffectsManagerHandle, HitEf
 );
 HitEffectsManager.displayName = 'HitEffectsManager';
 
-// ── Sudden+ / Lift+ 커버 ─────────────────────────────────────────────────
+// ── Sudden+ / Lift+ covers ───────────────────────────────────────────────
 
 export const LaneCover: React.FC<{
   suddenPlus: number;

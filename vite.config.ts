@@ -8,6 +8,8 @@ export default defineConfig({
         index: resolve(__dirname, 'src/index.ts'),
         'game/index': resolve(__dirname, 'src/game/index.ts'),
         'audio/index': resolve(__dirname, 'src/audio/index.ts'),
+        'game/AudioSchedulerWorker': resolve(__dirname, 'src/game/AudioSchedulerWorker.ts'),
+        'game/GameLoopWorker': resolve(__dirname, 'src/game/GameLoopWorker.ts'),
       },
       formats: ['es', 'cjs'],
     },

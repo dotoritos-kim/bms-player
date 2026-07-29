@@ -2,19 +2,21 @@ import { GameNote, SoundedEvent } from '../judgements';
 import { AudioPreloader } from './AudioPreloader';
 
 /**
- * 이진 탐색 헬퍼 함수들
- * - lowerBound: 정렬된 notes에서, note.time >= targetTime 인 첫 위치를 찾는다.
- * - upperBound: 정렬된 notes에서, note.time >  targetTime 인 첫 위치를 찾는다.
- *   (upperBound - 1)이 targetTime 이하인 마지막 위치가 됨.
+ * Binary-search helpers.
+ * - lowerBound: in a sorted notes array, finds the first index where
+ *   `note.time >= targetTime`.
+ * - upperBound: in a sorted notes array, finds the first index where
+ *   `note.time >  targetTime`. (upperBound - 1) is the last index whose
+ *   time is at most `targetTime`.
  */
 function lowerBound<T extends GameNote | SoundedEvent>(notes: T[], targetTime: number): number {
     let left = 0;
-    let right = notes.length; // right는 '배열 끝 + 1'을 가리키는 느낌
+    let right = notes.length; // right is the "one past the end" index
 
     while (left < right) {
         const mid = (left + right) >>> 1;
         if (notes[mid].time < targetTime) {
-            // 목표보다 작으면, 범위를 오른쪽으로 좁힘
+            // Below target — shrink the search to the right half.
             left = mid + 1;
         } else {
             // notes[mid].time >= targetTime
@@ -26,28 +28,28 @@ function lowerBound<T extends GameNote | SoundedEvent>(notes: T[], targetTime: n
 
 /**************************************
  * 4) createClosestNoteFinder
- *    - 한 번만 노트 배열을 time 기준으로 정렬
- *    - getClosestNote로 "가장 가까운 노트 한 개" 반환
+ *    - sorts the note array by time once
+ *    - getClosestNote returns the single nearest note
  **************************************/
 export function createClosestNoteFinder<T extends GameNote | SoundedEvent>(originalNotes: T[]) {
-    // time 기준으로 정렬 (처음 한 번만)
+    // Sort by time once on construction.
     const notes = [...originalNotes].sort((a, b) => a.time - b.time);
 
     return {
         /**
          * getClosestNotes
-         * - currentTime과 tolerance를 기준으로 가장 가까운 노트들을 반환
-         * - 이미 사용된 노트는 건너뛴다.
+         * - returns notes within `tolerance` of `currentTime`
+         * - skips notes that have already been consumed
          */
         getClosestNotes(currentTime: number, tolerance = 0.02): T[] {
-            // 사용되지 않은 노트만 대상으로 함
+            // Consider only notes that have not yet been consumed.
             const availableNotes = notes.filter((n) => !n.used);
 
-            // lowerBound를 활용해 범위 내 노트를 찾음
+            // Use lowerBound to bracket the in-range slice.
             const lowerIdx = lowerBound(availableNotes, currentTime - tolerance);
             const upperIdx = lowerBound(availableNotes, currentTime + tolerance);
 
-            // tolerance 범위 내의 노트를 반환
+            // Return notes that fall within the tolerance window.
             return availableNotes.slice(lowerIdx, upperIdx).filter((note) => {
                 const diff = Math.abs(note.time - currentTime);
                 return diff <= tolerance;
@@ -56,23 +58,23 @@ export function createClosestNoteFinder<T extends GameNote | SoundedEvent>(origi
 
         /**
          * markNoteAsUsed
-         * - 특정 노트를 사용된 것으로 표시
+         * - flags a specific note as consumed
          */
         markNoteAsUsed(note: T) {
-            note.used = true; // 동적으로 플래그 추가
+            note.used = true; // Adds the flag dynamically.
         },
 
         markGetNoteAsUsed(note: T) {
-            note.get = true; // 동적으로 플래그 추가
+            note.get = true; // Adds the flag dynamically.
         },
 
         /**
          * resetUsedNotes
-         * - 모든 노트의 사용 상태를 초기화
+         * - clears the consumed flag on every note
          */
         resetUsedNotes() {
             notes.forEach((n) => {
-                n.used = undefined; // 플래그 제거
+                n.used = undefined; // Removes the flag.
             });
         },
     };
@@ -104,13 +106,13 @@ export class PlayerAudio {
 
     /**
      * playAutoKeySound
-     * - matchedNote에 사용 플래그를 추가
-     * - 동기 버전(playAudioSync)을 사용하여 지연 최소화
+     * - flags `matchedNote` as consumed
+     * - uses the synchronous variant (`playAudioSync`) to minimise latency
      */
     playAutoKeySound(currentTime: number) {
-        const matchedNotes = this._autos.getClosestNotes(currentTime, 0.018); // 여러 개의 노트 반환
+        const matchedNotes = this._autos.getClosestNotes(currentTime, 0.018); // May return multiple notes.
 
-        // 반환된 모든 노트 처리
+        // Process every returned note.
         if (matchedNotes && matchedNotes.length > 0) {
             for (const matchedNote of matchedNotes) {
                 if (matchedNote.used !== true) {
@@ -122,8 +124,8 @@ export class PlayerAudio {
     }
 
     playAutoNoteKeySound(currentTime: number) {
-        const matchedNotes = this._notes.getClosestNotes(currentTime, 0.018); // 여러 개의 노트 반환
-        // 반환된 모든 노트 처리
+        const matchedNotes = this._notes.getClosestNotes(currentTime, 0.018); // May return multiple notes.
+        // Process every returned note.
         if (matchedNotes && matchedNotes.length > 0) {
             for (const matchedNote of matchedNotes) {
                 if (matchedNote.used !== true) {
@@ -135,9 +137,9 @@ export class PlayerAudio {
     }
 
     getCurrentNote(currentTime: number) {
-        const matchedNotes = this._notes.getClosestNotes(currentTime, 0.2); // 여러 개의 노트 반환
+        const matchedNotes = this._notes.getClosestNotes(currentTime, 0.2); // May return multiple notes.
         const notes: GameNote[] = [];
-        // 반환된 모든 노트 처리
+        // Process every returned note.
         if (matchedNotes && matchedNotes.length > 0) {
             matchedNotes.forEach((matchedNote) => {
                 if (matchedNote.get !== true) {
@@ -152,7 +154,7 @@ export class PlayerAudio {
 
     /**
      * resetUsedNotes
-     * - 모든 노트의 사용 상태를 초기화
+     * - clears the consumed flag on every note
      */
     resetUsedNotes() {
         this._notes.resetUsedNotes();

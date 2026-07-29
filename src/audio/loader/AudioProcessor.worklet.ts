@@ -1,36 +1,36 @@
 /**
  * AudioProcessor.worklet.ts
  *
- * AudioWorklet 프로세서 - 멀티 트랙 스테레오 오디오 재생
- * AudioWorklet은 별도의 스레드에서 실행되므로 외부 import가 불가능합니다.
- * 따라서 타입 정의를 inline으로 포함하고 Blob URL로 변환하여 사용합니다.
+ * AudioWorklet processor - multi-track stereo audio playback.
+ * AudioWorklet runs on a separate thread, so external imports are unavailable.
+ * The type definitions are therefore inlined and the code is loaded through a Blob URL.
  *
- * v2: 스테레오 지원, 동시 재생 지원, 이펙트 단순화
+ * v2: stereo support, concurrent playback, simplified effects.
  */
 
-// AudioWorklet 코드를 문자열로 정의
+// The AudioWorklet code, defined as a string.
 const workletCode = `
 /**
- * 스테레오 트랙 구조
- * - leftData, rightData: 각 채널의 Float32Array
- * - readIndex: 현재 읽기 위치 (소수점 포함 - 보간용)
- * - isPlaying: 재생 중 여부
- * - loop: 루프 여부
- * - volume: 트랙별 볼륨 (0-1)
+ * Stereo track structure.
+ * - leftData, rightData: Float32Array for each channel.
+ * - readIndex: current read position (fractional - used for interpolation).
+ * - isPlaying: whether the track is playing.
+ * - loop: whether the track loops.
+ * - volume: per-track volume (0-1).
  */
 class AudioProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
 
-        // 트랙 관리: Map<trackId, Track>
+        // Track management: Map<trackId, Track>.
         this.tracks = new Map();
         this.masterVolume = 0.5;
-        this.playbackRate = 1.0; // 전역 재생 속도
+        this.playbackRate = 1.0; // Global playback rate.
 
-        // 트랙별 볼륨: Map<trackId, number>
+        // Per-track volume: Map<trackId, number>.
         this.trackVolumes = new Map();
 
-        // 완료된 트랙을 정리하기 위한 카운터
+        // Counter used to clean up completed tracks.
         this.cleanupCounter = 0;
 
         this.port.onmessage = (e) => {
@@ -38,33 +38,33 @@ class AudioProcessor extends AudioWorkletProcessor {
             switch (type) {
                 case 'play':
                     if (data && (data.buffer || data.bufferLeft)) {
-                        // 스테레오 또는 모노 데이터 처리
-                        // Transferable Objects로 전송되어 이미 Float32Array로 받음 (복사 불필요)
+                        // Handle stereo or mono data.
+                        // Sent as Transferable Objects, so it already arrives as Float32Array (no copy needed).
                         let leftData, rightData;
 
                         if (data.bufferLeft && data.bufferRight) {
-                            // 스테레오: 이미 Float32Array로 전달됨
+                            // Stereo: already delivered as Float32Array.
                             leftData = data.bufferLeft;
                             rightData = data.bufferRight;
                         } else if (data.buffer) {
-                            // 모노: 양쪽 채널에 동일 데이터
+                            // Mono: same data on both channels.
                             leftData = data.buffer;
                             rightData = leftData;
                         } else {
                             break;
                         }
 
-                        // offset 지원: 초 단위 오프셋을 샘플 인덱스로 변환
-                        // sampleRate는 AudioWorkletGlobalScope에서 제공
+                        // offset support: convert the offset in seconds to a sample index.
+                        // sampleRate is provided by the AudioWorkletGlobalScope.
                         const offsetSeconds = data.offset || 0;
                         const startIndex = offsetSeconds * sampleRate;
 
-                        // 오프셋이 데이터 길이를 초과하면 재생하지 않음
+                        // Do not play when the offset exceeds the data length.
                         if (startIndex >= leftData.length) {
                             break;
                         }
 
-                        // scheduledTime 지원: AudioContext 시간 기준으로 정확한 재생 시점 계산
+                        // scheduledTime support: compute the exact playback point in AudioContext time.
                         let delaySamples = 0;
                         if (data.scheduledTime > 0) {
                             delaySamples = Math.max(0, Math.round((data.scheduledTime - currentTime) * sampleRate));
@@ -73,12 +73,12 @@ class AudioProcessor extends AudioWorkletProcessor {
                         this.tracks.set(key, {
                             leftData,
                             rightData,
-                            readIndex: startIndex, // 오프셋부터 시작
+                            readIndex: startIndex, // Start from the offset.
                             isPlaying: true,
                             loop: data.loop || false,
                             delaySamples,
                         });
-                        // #VOLWAV 볼륨 적용 (0-1, 기본값 1.0)
+                        // Apply the #VOLWAV volume (0-1, default 1.0).
                         const trackVol = typeof data.volume === 'number' ? Math.max(0, Math.min(1, data.volume)) : 1.0;
                         this.trackVolumes.set(key, trackVol);
                     }
@@ -127,7 +127,7 @@ class AudioProcessor extends AudioWorkletProcessor {
         };
     }
 
-    // 선형 보간 함수 (배속 재생용)
+    // Linear interpolation helper (for rate-adjusted playback).
     interpolate(data, index) {
         const idx0 = Math.floor(index);
         const idx1 = idx0 + 1;
@@ -137,7 +137,7 @@ class AudioProcessor extends AudioWorkletProcessor {
             return data[idx0] || 0;
         }
 
-        // 선형 보간: (1-frac)*data[idx0] + frac*data[idx1]
+        // Linear interpolation: (1-frac)*data[idx0] + frac*data[idx1]
         return data[idx0] * (1 - frac) + data[idx1] * frac;
     }
 
@@ -150,16 +150,16 @@ class AudioProcessor extends AudioWorkletProcessor {
         const blockSize = left.length;
         const rate = this.playbackRate;
 
-        // 출력 버퍼 초기화
+        // Clear the output buffer.
         for (let i = 0; i < blockSize; i++) {
             left[i] = 0;
             right[i] = 0;
         }
 
-        // 완료된 트랙 목록
+        // Tracks that have finished.
         const completedTracks = [];
 
-        // 각 트랙 처리
+        // Process each track.
         for (const [trackKey, track] of this.tracks.entries()) {
             if (!track.isPlaying) {
                 completedTracks.push(trackKey);
@@ -170,7 +170,7 @@ class AudioProcessor extends AudioWorkletProcessor {
             const dataLength = track.leftData.length;
 
             for (let i = 0; i < blockSize; i++) {
-                // 스케줄된 딜레이: 아직 재생 시작 전이면 스킵
+                // Scheduled delay: skip while playback has not started yet.
                 if (track.delaySamples > 0) {
                     track.delaySamples--;
                     continue;
@@ -186,25 +186,25 @@ class AudioProcessor extends AudioWorkletProcessor {
                     }
                 }
 
-                // 선형 보간을 사용한 샘플 읽기 (배속 지원)
+                // Read samples with linear interpolation (supports rate change).
                 const leftSample = this.interpolate(track.leftData, track.readIndex);
                 const rightSample = this.interpolate(track.rightData, track.readIndex);
 
                 left[i] += leftSample * trackVolume;
                 right[i] += rightSample * trackVolume;
 
-                // playbackRate만큼 인덱스 증가 (1.5x면 1.5씩 증가)
+                // Advance the index by playbackRate (1.5x advances by 1.5).
                 track.readIndex += rate;
             }
         }
 
-        // 마스터 볼륨 적용 및 클리핑 방지
+        // Apply master volume and prevent clipping.
         for (let i = 0; i < blockSize; i++) {
             left[i] = Math.max(-1, Math.min(1, left[i] * this.masterVolume));
             right[i] = Math.max(-1, Math.min(1, right[i] * this.masterVolume));
         }
 
-        // 주기적으로 완료된 트랙 정리 (매 100 블록마다)
+        // Periodically clean up completed tracks (every 100 blocks).
         this.cleanupCounter++;
         if (this.cleanupCounter >= 100) {
             this.cleanupCounter = 0;
@@ -221,7 +221,7 @@ class AudioProcessor extends AudioWorkletProcessor {
 registerProcessor('audio-worklet-processor', AudioProcessor);
 `;
 
-// Blob URL 생성
+// Create the Blob URL.
 const blob = new Blob([workletCode], { type: 'application/javascript' });
 export const AudioProcessorWorkletUrl = URL.createObjectURL(blob);
 

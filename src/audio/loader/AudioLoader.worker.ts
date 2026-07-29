@@ -1,8 +1,8 @@
 /**
  * AudioLoader.worker.ts
  *
- * 오디오 파일을 병렬로 fetch한 뒤 ArrayBuffer를 메인 스레드로 보내는 Worker
- * Vite에서는 `?worker` suffix로 import하여 사용합니다.
+ * Worker that fetches audio files in parallel and sends ArrayBuffers to the main thread.
+ * In Vite, import it with the `?worker` suffix.
  *
  * @example
  * ```typescript
@@ -11,21 +11,21 @@
  * ```
  */
 
-import type { FileMap, LoaderInbound } from './messages';
+import type { LoaderInbound } from './messages';
 import { postFromLoaderWorker } from './messages';
 
-// 브라우저 동시 연결 제한 (대부분 6개)
+// Browser concurrent-connection limit (usually 6).
 const CONCURRENT_LIMIT = 6;
 
-// 배치 간 딜레이 (ms) - 서버 부하 분산
+// Delay between batches (ms) - spreads server load.
 const BATCH_DELAY_MS = 50;
 
-// 429 재시도 설정
+// 429 retry settings.
 const MAX_RETRIES = 5;
 const INITIAL_RETRY_DELAY_MS = 200;
 const MAX_RETRY_DELAY_MS = 5000;
 
-// 딜레이 유틸리티
+// Delay utility.
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Build URL with query parameter for files with special characters to avoid reverse proxy issues
@@ -39,8 +39,8 @@ function buildAudioUrl(baseUrl: string, fileName: string): string {
     return `${baseUrl}/${encodedFileName}`;
 }
 
-// 파일 로드 함수: 429 에러 시 지수 백오프로 재시도
-// 확장자 폴백 없음 — 확장자 해석은 로드 전에 resolveKeysoundFiles로 완료되어야 함
+// File-loading function: retries with exponential backoff on 429 errors.
+// No extension fallback — extension resolution must be completed by resolveKeysoundFiles before loading.
 async function loadAudioFile(baseUrl: string, key: string, fileName: string): Promise<ArrayBuffer> {
     let lastError: Error | null = null;
     let retryDelay = INITIAL_RETRY_DELAY_MS;
@@ -85,7 +85,7 @@ async function loadAudioFile(baseUrl: string, key: string, fileName: string): Pr
     throw lastError || new Error('Unknown fetch error');
 }
 
-// 단일 파일 로드 및 결과 전송
+// Loads a single file and sends the result.
 async function loadAndSendFile(
     baseUrl: string,
     key: string,
@@ -97,7 +97,7 @@ async function loadAndSendFile(
         const arrayBuffer = await loadAudioFile(baseUrl, key, fileName);
         loadedCount.value++;
 
-        // 진행상황(PROGRESS) 전송
+        // Send progress (PROGRESS).
         postFromLoaderWorker({
             type: 'PROGRESS',
             payload: {
@@ -108,7 +108,7 @@ async function loadAndSendFile(
             },
         });
 
-        // 메인 스레드로 ArrayBuffer 전송 (Transferable)
+        // Send the ArrayBuffer to the main thread (Transferable).
         postFromLoaderWorker(
             {
                 type: 'LOADED',
@@ -123,7 +123,7 @@ async function loadAndSendFile(
 
         return true;
     } catch (error: unknown) {
-        // 개별 파일 실패는 에러 메시지만 보내고 계속 진행
+        // A single file failure only reports an error message and keeps going.
         loadedCount.value++;
         postFromLoaderWorker({
             type: 'PROGRESS',
@@ -142,7 +142,7 @@ async function loadAndSendFile(
     }
 }
 
-// Worker 메시지 핸들러
+// Worker message handler.
 self.onmessage = async (event: MessageEvent<LoaderInbound>) => {
     const msg = event.data;
 
@@ -163,23 +163,23 @@ self.onmessage = async (event: MessageEvent<LoaderInbound>) => {
 
             const loadedCount = { value: 0 };
 
-            // 병렬 로딩: CONCURRENT_LIMIT 개씩 배치로 처리
+            // Parallel loading: process in batches of CONCURRENT_LIMIT.
             for (let i = 0; i < entries.length; i += CONCURRENT_LIMIT) {
                 const batch = entries.slice(i, i + CONCURRENT_LIMIT);
                 const promises = batch.map(([key, fileName]) =>
                     loadAndSendFile(baseUrl, key, fileName, loadedCount, total),
                 );
 
-                // 배치 내에서는 병렬 실행, 배치 간에는 순차 실행
+                // Run in parallel within a batch, sequentially across batches.
                 await Promise.all(promises);
 
-                // 다음 배치 전 딜레이 (마지막 배치 제외) - 서버 부하 분산
+                // Delay before the next batch (except the last one) - spreads server load.
                 if (i + CONCURRENT_LIMIT < entries.length) {
                     await delay(BATCH_DELAY_MS);
                 }
             }
 
-            // 모든 파일 로딩 완료
+            // All files finished loading.
             postFromLoaderWorker({
                 type: 'DONE',
                 payload: { total, loaded: loadedCount.value },

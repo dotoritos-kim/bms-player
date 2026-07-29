@@ -1,9 +1,9 @@
 /**
- * GameLoopWorker - Worker 내부 코드
+ * GameLoopWorker - Code running inside the Worker.
  *
- * Web Worker에서 실행되며, GameEngine을 사용하여 게임 로직을 처리.
- * setInterval(5ms)로 tick, performance.now() 기반 타이밍.
- * Main Thread와 postMessage로 통신.
+ * Runs in a Web Worker and processes game logic via GameEngine.
+ * Ticks via setInterval(5ms), timing based on performance.now().
+ * Communicates with the Main Thread via postMessage.
  */
 
 import { GameEngine, type TickResult, type GameEngineState } from './GameEngine';
@@ -19,10 +19,10 @@ import type { INotechart, GameNote, SoundedEvent } from '../audio/judgements';
 // ==================== Lightweight Notechart Proxy ====================
 
 /**
- * Worker 내에서 사용할 경량 Notechart 프록시
- * 실제 Notechart 대신 미리 계산된 데이터로 동작
+ * Lightweight Notechart proxy for use inside the Worker.
+ * Operates on precomputed data instead of a real Notechart.
  *
- * `INotechart` 를 구현하므로 `GameEngine` 에 직접 주입할 수 있다 (cast 불필요).
+ * Implements `INotechart`, so it can be injected directly into `GameEngine` (no cast needed).
  */
 class NotechartProxy implements INotechart {
   readonly notes: GameNote[];
@@ -40,7 +40,7 @@ class NotechartProxy implements INotechart {
   }
 
   /**
-   * 초를 비트로 변환 (이진 탐색)
+   * Converts seconds to beats (binary search).
    */
   secondsToBeat(seconds: number): number {
     const table = this.beatSecondsTable;

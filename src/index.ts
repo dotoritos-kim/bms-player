@@ -148,7 +148,7 @@ export type { KeysoundPlayer as KeysoundPlayerInterface } from './types/Keysound
 export { I18nProvider, useI18n, fallbackTranslate, defaultMessages } from './i18n';
 export type { BmsPlayerMessages, BmsPlayerI18nKey, I18nProviderValue, Translator } from './i18n';
 
-// Stage 3 — GamePhase 통합 상태 (REFACTOR-PLAN §6.2). 신규 컨슈머용 노출.
+// Stage 3 — Unified GamePhase state (REFACTOR-PLAN §6.2). Exposed for new consumers.
 export type { GamePhase, GamePhaseKind } from './types/GamePhase';
 export {
     PHASE_READY,

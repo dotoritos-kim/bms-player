@@ -1,10 +1,10 @@
 /**
  * BMS Audio Module
  *
- * BMS 파일의 키음을 로드하고 재생하는 기능을 제공합니다.
- * Worker와 AudioWorklet을 사용하여 고성능 오디오 재생을 지원합니다.
+ * Provides loading and playback of BMS keysounds. Uses Workers and the
+ * AudioWorklet API for high-performance audio playback.
  *
- * @example Worker 사용 (Vite)
+ * @example Worker usage (Vite)
  * ```typescript
  * // Consumers must provide their own Worker instantiation:
  * import AudioLoaderWorkerUrl from '@rhythm-archive/bms-player/audio/loader/AudioLoader.worker?worker';

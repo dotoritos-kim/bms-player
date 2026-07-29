@@ -1,13 +1,13 @@
 /**
- * BMS 게임 캔버스 — WebGL 기반 실시간 게임 렌더링
+ * BMS game canvas — WebGL-based real-time game rendering.
  *
- * S10 (REFACTOR-PLAN §9): Composite 패턴으로 레이어 분리.
- * - canvas/laneConfig.ts  — 레인 설정 상수 + 헬퍼 (순수 데이터)
- * - canvas/LaneLayer.tsx  — 배경 · 구분선 · 판정선 · 키빔
- * - canvas/NoteLayer.tsx  — 일반 노트 · 롱노트 · 지뢰 (InstancedMesh)
- * - canvas/EffectLayer.tsx — 히트 이펙트 · 커버 · Early/Late HUD
+ * S10 (REFACTOR-PLAN §9): layers split via the Composite pattern.
+ * - canvas/laneConfig.ts  — lane config constants + helpers (pure data)
+ * - canvas/LaneLayer.tsx  — background, dividers, judgment line, key beams
+ * - canvas/NoteLayer.tsx  — regular notes, long notes, landmines (InstancedMesh)
+ * - canvas/EffectLayer.tsx — hit effects, covers, Early/Late HUD
  *
- * GameCanvas 자체는 Facade: props 유효성 검사 + 레이어 합성 + Canvas 루트만 담당.
+ * GameCanvas itself is a Facade: props validation + layer composition + Canvas root only.
  */
 
 import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react';
@@ -17,7 +17,7 @@ import type { Notechart } from '../audio/judgements';
 import type { KeyColumn, Judgment, GameLoopState, JudgmentEvent } from './index';
 import { JudgmentEngine } from './JudgmentEngine';
 
-// canvas 서브모듈 (S10 분리)
+// canvas submodules (split in S10)
 import {
   type LaneConfig,
   type PlaySide,
@@ -96,7 +96,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
       gameState,
       hiSpeed = 1,
       heldKeys = new Set(),
-      lastJudgmentEvent = null,
+      lastJudgmentEvent: _lastJudgmentEvent = null,
       judgmentQueue = [],
       width = 400,
       height = 700,
@@ -111,15 +111,15 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
   ) {
     const hitEffectsRef = useRef<HitEffectsManagerHandle>(null);
 
-    // 판정된 노트 ID 추적 (ref으로 관리하여 불필요한 리렌더 방지)
+    // Track judged note IDs (kept in a ref to avoid unnecessary re-renders)
     const judgedNoteIdsRef = useRef<Set<number>>(new Set());
     const [judgedNoteIds, setJudgedNoteIds] = useState<Set<number>>(new Set());
 
-    // 트리거된 지뢰 노트 ID 추적
+    // Track triggered landmine note IDs
     const [internalTriggeredMineIds, setTriggeredMineIds] = useState<Set<number>>(new Set());
     const activeMineIds = externalTriggeredMineIds ?? internalTriggeredMineIds;
 
-    // 레인 위치 및 색상 계산 (레인 설정 변경 시만 재계산)
+    // Compute lane positions and colors (recomputed only when the lane config changes)
     const lanePositions = useMemo(() => calculateLanePositions(laneConfig, laneWidthScale), [laneConfig, laneWidthScale]);
     const laneColorMap = useMemo(() => getLaneColorMap(laneConfig), [laneConfig]);
     const totalWidth = useMemo(
@@ -127,7 +127,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
       [laneConfig, laneWidthScale],
     );
 
-    // 현재 위치 계산 (NaN/Infinity 안전 가드)
+    // Compute current position (guarded against NaN/Infinity)
     const currentPosition = useMemo(() => {
       if (!notechart?.beatToPosition) return 0;
       const beat = gameState.currentBeat;
@@ -136,14 +136,14 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
       return Number.isFinite(position) ? position : 0;
     }, [notechart, gameState.currentBeat]);
 
-    // 히트 이펙트 트리거 (ref 기반 — 리렌더 없음)
+    // Hit effect trigger (ref based — no re-render)
     const triggerHitEffect = useCallback((column: KeyColumn, judgment: Judgment) => {
       hitEffectsRef.current?.trigger(column, judgment);
     }, []);
 
     React.useImperativeHandle(ref, () => ({ triggerHitEffect }), [triggerHitEffect]);
 
-    // 판정 이벤트 처리 (큐 기반 — 동시 판정 지원)
+    // Handle judgment events (queue based — supports simultaneous judgments)
     const processedQueueLenRef = useRef(0);
     useEffect(() => {
       if (judgmentQueue.length > processedQueueLenRef.current) {
@@ -157,14 +157,14 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
       }
     }, [judgmentQueue, triggerHitEffect]);
 
-    // 큐 리셋 시 카운터도 리셋
+    // Reset the counter when the queue is reset
     useEffect(() => {
       if (judgmentQueue.length === 0) {
         processedQueueLenRef.current = 0;
       }
     }, [judgmentQueue.length]);
 
-    // 게임 상태 리셋 감지 (새 게임 시작 시 정리)
+    // Detect game state reset (cleanup when a new game starts)
     useEffect(() => {
       if (!gameState.isPlaying && gameState.currentTime === 0) {
         judgedNoteIdsRef.current.clear();
@@ -184,10 +184,10 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
           dpr={[1, 2]}
           style={{ width: '100%', height: '100%' }}
         >
-          {/* 카메라 */}
+          {/* Camera */}
           <CameraController height={height} totalWidth={totalWidth} />
 
-          {/* L1: 레인 배경 레이어 */}
+          {/* L1: lane background layer */}
           <LaneLayer
             heldKeys={heldKeys}
             laneConfig={laneConfig}
@@ -195,10 +195,10 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
             totalWidth={totalWidth}
           />
 
-          {/* 판정선 */}
+          {/* Judgment line */}
           <JudgmentLine totalWidth={totalWidth} />
 
-          {/* L2: 노트 레이어 */}
+          {/* L2: note layer */}
           {notechart?.notes && (
             <NotesRenderer
               notes={notechart.notes}
@@ -233,7 +233,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
             />
           )}
 
-          {/* L3: 이펙트 레이어 */}
+          {/* L3: effect layer */}
           <HitEffectsManager
             ref={hitEffectsRef}
             laneConfig={laneConfig}
@@ -249,7 +249,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
           )}
         </Canvas>
 
-        {/* UI 오버레이 — 좌측 (콤보/스코어/게이지) */}
+        {/* UI overlay — left (combo/score/gauge) */}
         <div
           style={{
             position: 'absolute',
@@ -271,7 +271,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
           </div>
         </div>
 
-        {/* UI 오버레이 — 우측 (판정 통계) */}
+        {/* UI overlay — right (judgment stats) */}
         <div
           style={{
             position: 'absolute',
@@ -302,7 +302,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
           ))}
         </div>
 
-        {/* 커버 값 표시 */}
+        {/* Cover value display */}
         {suddenPlus > 0 && (
           <div style={{ position: 'absolute', top: 10, right: 10, color: '#00ff00', fontFamily: 'monospace', fontSize: 12 }}>
             SUD+ {suddenPlus}
@@ -314,7 +314,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
           </div>
         )}
 
-        {/* 마지막 판정 표시 */}
+        {/* Last judgment display */}
         {gameState.lastJudgment && (
           <div
             style={{
@@ -333,7 +333,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
           </div>
         )}
 
-        {/* Early/Late 플로팅 텍스트 */}
+        {/* Early/Late floating text */}
         {gameState.lastJudgment && gameState.lastJudgment !== 'MISS' && gameState.lastOffset !== 0 && (
           <div
             style={{
@@ -355,7 +355,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
           </div>
         )}
 
-        {/* Early/Late 타이밍 표시기 */}
+        {/* Early/Late timing indicator */}
         <TimingIndicator offsets={gameState.recentOffsets} lastOffset={gameState.lastOffset} />
       </div>
     );

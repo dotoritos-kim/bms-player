@@ -1,6 +1,6 @@
 /**
- * 게임 옵션 UI 컴포넌트
- * Hi-Speed, 게이지 타입, 키 설정 등
+ * Game options UI component.
+ * Hi-Speed, gauge type, key bindings, etc.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -8,7 +8,7 @@ import type { GaugeType } from './GaugeSystem';
 import type { KeyColumn } from './InputHandler';
 import { DEFAULT_KEY_MAP } from './InputHandler';
 
-// ============ 타입 ============
+// ============ Types ============
 
 export interface GameOptionsState {
   hiSpeed: number;
@@ -17,22 +17,22 @@ export interface GameOptionsState {
   liftPlus: number;
   laneOption: 'normal' | 'mirror' | 'random';
   keyMap: Record<string, KeyColumn>;
-  // 레이턴시 보정
+  // Latency compensation
   audioLatency: number;
   judgmentOffset: number;
   visualOffset: number;
 }
 
 export interface GameOptionsProps {
-  /** 현재 옵션 */
+  /** Current options */
   options: GameOptionsState;
-  /** 옵션 변경 콜백 */
+  /** Options change callback */
   onChange: (options: GameOptionsState) => void;
-  /** 닫기 콜백 */
+  /** Close callback */
   onClose: () => void;
 }
 
-// ============ 기본값 ============
+// ============ Defaults ============
 
 export const DEFAULT_GAME_OPTIONS: GameOptionsState = {
   hiSpeed: 1.0,
@@ -46,9 +46,9 @@ export const DEFAULT_GAME_OPTIONS: GameOptionsState = {
   visualOffset: 0,
 };
 
-// ============ 서브 컴포넌트 ============
+// ============ Subcomponents ============
 
-/** 슬라이더 */
+/** Slider */
 const Slider: React.FC<{
   label: string;
   value: number;
@@ -75,7 +75,7 @@ const Slider: React.FC<{
   </div>
 );
 
-/** 선택 버튼 그룹 */
+/** Selectable button group */
 const ButtonGroup: React.FC<{
   label: string;
   options: Array<{ value: string; label: string; color?: string }>;
@@ -108,7 +108,7 @@ const ButtonGroup: React.FC<{
   </div>
 );
 
-// ============ 키 설정 컴포넌트 ============
+// ============ Key binding component ============
 
 const KEY_LABELS: Record<KeyColumn, string> = {
   'SC': 'Scratch',
@@ -155,7 +155,7 @@ const KeyBindingRow: React.FC<{
   </div>
 );
 
-// ============ 메인 컴포넌트 ============
+// ============ Main component ============
 
 export const GameOptions: React.FC<GameOptionsProps> = ({
   options,
@@ -165,7 +165,7 @@ export const GameOptions: React.FC<GameOptionsProps> = ({
   const [activeTab, setActiveTab] = useState<'speed' | 'gauge' | 'keys' | 'latency'>('speed');
   const [bindingColumn, setBindingColumn] = useState<KeyColumn | null>(null);
 
-  // 옵션 업데이트 헬퍼
+  // Option update helper
   const updateOption = useCallback(
     <K extends keyof GameOptionsState>(key: K, value: GameOptionsState[K]) => {
       onChange({ ...options, [key]: value });
@@ -173,35 +173,35 @@ export const GameOptions: React.FC<GameOptionsProps> = ({
     [options, onChange]
   );
 
-  // 키 바인딩
+  // Key binding
   const handleKeyRebind = useCallback((column: KeyColumn) => {
     setBindingColumn(column);
   }, []);
 
-  // 키 입력 감지
+  // Detect key input
   React.useEffect(() => {
     if (!bindingColumn) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
 
-      // ESC로 취소
+      // Cancel with ESC
       if (e.code === 'Escape') {
         setBindingColumn(null);
         return;
       }
 
-      // 새 키 매핑
+      // New key mapping
       const newKeyMap = { ...options.keyMap };
 
-      // 기존에 이 키를 사용하는 컬럼 찾기
+      // Find the column that previously used this key
       for (const [key, col] of Object.entries(newKeyMap)) {
         if (col === bindingColumn) {
           delete newKeyMap[key];
         }
       }
 
-      // 새 키 할당
+      // Assign the new key
       newKeyMap[e.code] = bindingColumn;
       updateOption('keyMap', newKeyMap);
       setBindingColumn(null);
@@ -211,7 +211,7 @@ export const GameOptions: React.FC<GameOptionsProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [bindingColumn, options.keyMap, updateOption]);
 
-  // 현재 키 찾기
+  // Find the current key
   const getKeyForColumn = (column: KeyColumn): string => {
     for (const [key, col] of Object.entries(options.keyMap)) {
       if (col === column) return key;
@@ -241,7 +241,7 @@ export const GameOptions: React.FC<GameOptionsProps> = ({
           boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)',
         }}
       >
-        {/* 헤더 */}
+        {/* Header */}
         <div
           style={{
             display: 'flex',
@@ -271,7 +271,7 @@ export const GameOptions: React.FC<GameOptionsProps> = ({
           </button>
         </div>
 
-        {/* 탭 */}
+        {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid #444' }}>
           {(['speed', 'gauge', 'keys', 'latency'] as const).map((tab) => (
             <button
@@ -293,9 +293,9 @@ export const GameOptions: React.FC<GameOptionsProps> = ({
           ))}
         </div>
 
-        {/* 탭 내용 */}
+        {/* Tab content */}
         <div style={{ padding: 20, color: '#fff' }}>
-          {/* 스피드 설정 */}
+          {/* Speed settings */}
           {activeTab === 'speed' && (
             <>
               <Slider
@@ -336,7 +336,7 @@ export const GameOptions: React.FC<GameOptionsProps> = ({
             </>
           )}
 
-          {/* 게이지 설정 */}
+          {/* Gauge settings */}
           {activeTab === 'gauge' && (
             <ButtonGroup
               label="Gauge Type"
@@ -352,7 +352,7 @@ export const GameOptions: React.FC<GameOptionsProps> = ({
             />
           )}
 
-          {/* 키 설정 */}
+          {/* Key settings */}
           {activeTab === 'keys' && (
             <div>
               <div style={{ fontSize: 12, color: '#888', marginBottom: 15 }}>
@@ -386,7 +386,7 @@ export const GameOptions: React.FC<GameOptionsProps> = ({
             </div>
           )}
 
-          {/* 레이턴시 설정 */}
+          {/* Latency settings */}
           {activeTab === 'latency' && (
             <div>
               <div style={{ fontSize: 12, color: '#888', marginBottom: 15 }}>

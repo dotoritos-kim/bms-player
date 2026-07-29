@@ -1,6 +1,6 @@
 /**
- * BMS 게임 모듈
- * 구동기(플레이어) 핵심 기능 제공
+ * BMS game module.
+ * Provides the core player (game client) functionality.
  */
 
 export { InputHandler, DEFAULT_KEY_MAP, ALT_KEY_MAP, KEY_MAP_2P } from './InputHandler';

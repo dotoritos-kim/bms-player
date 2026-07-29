@@ -1,6 +1,6 @@
 /**
- * useGamePlayer 훅
- * BMS 게임 플레이를 위한 React 커스텀 훅
+ * useGamePlayer hook.
+ * React custom hook for BMS gameplay.
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -25,94 +25,94 @@ import {
 } from './index';
 
 export interface GamePlayerOptions {
-  /** 게이지 타입 */
+  /** Gauge type */
   gaugeType?: GaugeType;
-  /** TOTAL 값 */
+  /** TOTAL value */
   total?: number;
-  /** 판정 RANK (0-4) */
+  /** Judgment RANK (0-4) */
   rank?: number;
-  /** 커스텀 판정 (#DEFEXRANK) */
+  /** Custom judgment (#DEFEXRANK) */
   defexrank?: number;
   /** Hi-Speed */
   hiSpeed?: number;
-  /** 배속 */
+  /** Playback rate */
   playbackRate?: number;
-  /** 시작 오프셋 (ms) */
+  /** Start offset (ms) */
   startOffset?: number;
-  /** 판정 오프셋 (ms, 양수=빠른입력이 정확) */
+  /** Judgment offset (ms, positive = early input counts as accurate) */
   judgmentOffset?: number;
-  /** 비주얼 오프셋 (ms, 양수=노트가 늦게 표시) */
+  /** Visual offset (ms, positive = notes displayed later) */
   visualOffset?: number;
-  /** 자동 시작 */
+  /** Auto start */
   autoStart?: boolean;
-  /** 오토플레이 모드 */
+  /** Autoplay mode */
   autoplay?: boolean;
-  /** 커스텀 키 바인딩 */
+  /** Custom key bindings */
   keyBindings?: KeyBindings;
-  /** 플레이 사이드 (1P, 2P, DP) */
+  /** Play side (1P, 2P, DP) */
   playSide?: '1P' | '2P' | 'DP';
-  /** 플로팅 하이스피드 (BPM 변속 시 Green Number 유지) */
+  /** Floating Hi-Speed (keeps the Green Number constant across BPM changes) */
   floatingHiSpeed?: boolean;
-  /** Worker 인스턴스 (제공 시 WorkerGameLoop 사용, 백그라운드 재생 지원) */
+  /** Worker instance (when provided, uses WorkerGameLoop and supports background playback) */
   worker?: Worker;
 }
 
 export interface GamePlayerState {
-  /** 로딩 상태 */
+  /** Loading state */
   isLoading: boolean;
-  /** 준비 완료 */
+  /** Ready */
   isReady: boolean;
   /**
-   * 통합 게임 단계 (Stage 3, REFACTOR-PLAN §6.2). 신규 컨슈머는 이 필드를
-   * 우선 사용한다. 아래 4-boolean(`isPlaying`/`isPaused`/`isCompleted`/
-   * `isFailed`)은 호환을 위해 유지되며 `phase`로부터 derive된다.
+   * Unified game phase (Stage 3, REFACTOR-PLAN §6.2). New consumers should
+   * prefer this field. The 4 booleans below (`isPlaying`/`isPaused`/
+   * `isCompleted`/`isFailed`) are kept for compatibility and derived from `phase`.
    */
   phase: import('../types/GamePhase').GamePhase;
-  /** @deprecated `phase.kind === 'playing' || phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'playing' || phase.kind === 'paused'`. */
   isPlaying: boolean;
-  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'paused'`. */
   isPaused: boolean;
-  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'completed'`. */
   isCompleted: boolean;
-  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'failed'`. */
   isFailed: boolean;
-  /** 현재 게임 시간 (ms) */
+  /** Current game time (ms) */
   currentTime: number;
-  /** 현재 비트 */
+  /** Current beat */
   currentBeat: number;
-  /** 현재 콤보 */
+  /** Current combo */
   combo: number;
-  /** 게이지 값 (%) */
+  /** Gauge value (%) */
   gaugeValue: number;
-  /** EX 스코어 */
+  /** EX score */
   exScore: number;
-  /** 마지막 판정 */
+  /** Last judgment */
   lastJudgment: JudgmentEvent | null;
-  /** 눌린 키 */
+  /** Held keys */
   heldKeys: Set<KeyColumn>;
-  /** 최종 스코어 (완료/실패 시) */
+  /** Final score (on completion/failure) */
   finalScore: ScoreState | null;
 }
 
 export interface GamePlayerActions {
-  /** 게임 시작 */
+  /** Start the game */
   start: () => void;
-  /** 일시정지 */
+  /** Pause */
   pause: () => void;
-  /** 재개 */
+  /** Resume */
   resume: () => void;
-  /** 정지 */
+  /** Stop */
   stop: () => void;
-  /** 재시작 */
+  /** Restart */
   restart: () => void;
-  /** Hi-Speed 변경 */
+  /** Change Hi-Speed */
   setHiSpeed: (speed: number) => void;
 }
 
 export interface UseGamePlayerResult {
   state: GamePlayerState;
   actions: GamePlayerActions;
-  /** GameCanvas에 전달할 props */
+  /** Props to pass to GameCanvas */
   canvasProps: {
     notechart: Notechart;
     gameState: GameLoopState;
@@ -129,11 +129,11 @@ export function useGamePlayer(
   keysoundPlayer: KeysoundPlayer | null,
   options: GamePlayerOptions = {}
 ): UseGamePlayerResult {
-  // 옵션 (재생성 방지)
+  // Options (prevents re-creation)
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  // 상태
+  // State
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [gameState, setGameState] = useState<GameLoopState>({
@@ -171,7 +171,7 @@ export function useGamePlayer(
   const gameLoopRef = useRef<GameLoop | WorkerGameLoop | null>(null);
   const inputHandlerRef = useRef<InputHandler | null>(null);
 
-  // 초기화
+  // Initialization
   useEffect(() => {
     if (!notechart || !keysoundPlayer) {
       setIsLoading(true);
@@ -179,7 +179,7 @@ export function useGamePlayer(
       return;
     }
 
-    // 키사운드 플레이어가 준비되었는지 확인
+    // Check whether the keysound player is ready
     if (!keysoundPlayer.isReady) {
       setIsLoading(true);
       setIsReady(false);
@@ -189,24 +189,24 @@ export function useGamePlayer(
     setIsLoading(false);
     setIsReady(true);
 
-    // InputHandler 생성 (커스텀 키 바인딩 및 playSide 적용)
+    // Create the InputHandler (applies custom key bindings and playSide)
     const playSide = optionsRef.current.playSide ?? 'DP';
 
-    // 2P 모드에서는 전용 키 매핑 사용 (SC가 오른쪽에 있으므로)
+    // 2P mode uses a dedicated key mapping (since SC is on the right)
     let keyMap: Record<string, KeyColumn>;
     if (playSide === '2P') {
       keyMap = KEY_MAP_2P;
     } else {
-      // 1P 또는 DP 모드에서는 저장된 키 바인딩 또는 기본값 사용
+      // 1P or DP mode uses the saved key bindings or defaults
       const keyBindings = optionsRef.current.keyBindings ?? loadKeyBindings();
       keyMap = bindingsToKeyMap(keyBindings);
     }
 
     if (!inputHandlerRef.current) {
       inputHandlerRef.current = new InputHandler({ keyMap });
-      // 키 상태 추적은 GameLoop의 onKeyInput 콜백에서 관리
+      // Key state tracking is managed by GameLoop's onKeyInput callback
     } else {
-      // 기존 핸들러의 키 맵 업데이트
+      // Update the existing handler's key map
       inputHandlerRef.current.setKeyMap(keyMap);
     }
 
@@ -219,7 +219,7 @@ export function useGamePlayer(
     };
   }, [notechart, keysoundPlayer, options.playSide]);
 
-  // GameLoop 콜백
+  // GameLoop callbacks
   const callbacks: GameLoopCallbacks = useMemo(() => ({
     onUpdate: (state) => {
       setGameState(state);
@@ -241,7 +241,7 @@ export function useGamePlayer(
     onFailed: (score) => {
       setFinalScore(score);
     },
-    // 키 입력 콜백 - GameLoop이 InputHandler 콜백을 관리하므로 여기서 heldKeys 상태 관리
+    // Key input callback - GameLoop manages the InputHandler callbacks, so heldKeys state is managed here
     onKeyInput: (column, held) => {
       setHeldKeys((prev) => {
         const next = new Set(prev);
@@ -255,14 +255,14 @@ export function useGamePlayer(
     },
   }), []);
 
-  // GameLoop 생성 함수 (Worker가 제공되면 WorkerGameLoop 사용)
+  // GameLoop factory (uses WorkerGameLoop when a Worker is provided)
   const createGameLoop = useCallback((): GameLoop | WorkerGameLoop | null => {
     if (!notechart || !keysoundPlayer || !keysoundPlayer.isReady) {
       return null;
     }
 
-    // KeysoundPlayer 인터페이스의 `getAudioContext()` 우선 사용, 미구현 구현체는
-    // 기존 `preloader.context` 로 폴백 (deprecated 호환성).
+    // Prefer the KeysoundPlayer interface's `getAudioContext()`; implementations
+    // without it fall back to the legacy `preloader.context` (deprecated compatibility).
     const audioContext =
       keysoundPlayer.getAudioContext?.() ?? keysoundPlayer.preloader?.context ?? null;
 
@@ -298,16 +298,16 @@ export function useGamePlayer(
     return new GameLoop(commonConfig, callbacks);
   }, [notechart, keysoundPlayer, callbacks]);
 
-  // 액션: 시작
+  // Action: start
   const start = useCallback(async () => {
     if (!isReady) return;
 
-    // 기존 게임 루프 정리
+    // Clean up the existing game loop
     if (gameLoopRef.current) {
       gameLoopRef.current.dispose();
     }
 
-    // 새 게임 루프 생성
+    // Create a new game loop
     const gameLoop = createGameLoop();
     if (!gameLoop) return;
 
@@ -319,43 +319,43 @@ export function useGamePlayer(
     await gameLoop.start();
   }, [isReady, createGameLoop]);
 
-  // 액션: 일시정지
+  // Action: pause
   const pause = useCallback(() => {
     gameLoopRef.current?.pause();
   }, []);
 
-  // 액션: 재개
+  // Action: resume
   const resume = useCallback(() => {
     gameLoopRef.current?.resume();
   }, []);
 
-  // 액션: 정지
+  // Action: stop
   const stop = useCallback(() => {
     gameLoopRef.current?.stop();
   }, []);
 
-  // 액션: 재시작
+  // Action: restart
   const restart = useCallback(() => {
     stop();
-    // 약간의 딜레이 후 시작
+    // Start after a short delay
     setTimeout(() => {
       start();
     }, 100);
   }, [stop, start]);
 
-  // 액션: Hi-Speed 변경
+  // Action: change Hi-Speed
   const setHiSpeedAction = useCallback((speed: number) => {
     setHiSpeed(Math.max(0.5, Math.min(10, speed)));
   }, []);
 
-  // 자동 시작
+  // Auto start
   useEffect(() => {
     if (isReady && options.autoStart && !gameLoopRef.current) {
       start();
     }
   }, [isReady, options.autoStart, start]);
 
-  // 결과 조합
+  // Compose the result
   const state: GamePlayerState = useMemo(() => ({
     isLoading,
     isReady,

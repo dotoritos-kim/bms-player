@@ -1,6 +1,6 @@
 /**
- * GamePlayer 통합 컴포넌트
- * 게임 캔버스 + UI + 결과 화면을 통합한 완전한 게임 플레이어
+ * GamePlayer combined component.
+ * A complete game player integrating the game canvas, UI, and result screen.
  */
 
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
@@ -12,38 +12,38 @@ import { JudgmentEngine } from './JudgmentEngine';
 import { GaugeSystem, type GaugeType } from './GaugeSystem';
 import type { ScoreState } from './ScoreManager';
 
-// ============ 타입 ============
+// ============ Types ============
 
 export interface GamePlayerProps {
-  /** 노트 차트 */
+  /** Notechart */
   notechart: Notechart | null;
-  /** 키사운드 플레이어 */
+  /** Keysound player */
   keysoundPlayer: KeysoundPlayer | null;
-  /** 게임 옵션 */
+  /** Game options */
   options?: GamePlayerOptions;
-  /** 캔버스 너비 */
+  /** Canvas width */
   width?: number;
-  /** 캔버스 높이 */
+  /** Canvas height */
   height?: number;
-  /** Sudden+ 커버 (0-500, 상단 가림) */
+  /** Sudden+ cover (0-500, covers the top) */
   suddenPlus?: number;
-  /** Lift+ 커버 (0-500, 하단 올림) */
+  /** Lift+ cover (0-500, raises the bottom) */
   liftPlus?: number;
-  /** 노트 높이 배율 (기본 1.0) */
+  /** Note height scale (default 1.0) */
   noteScale?: number;
-  /** 레인 너비 배율 (기본 1.0) */
+  /** Lane width scale (default 1.0) */
   laneWidthScale?: number;
-  /** 자동 전체화면 (게임 시작 시 자동으로 전체화면 진입) */
+  /** Auto fullscreen (enters fullscreen automatically when the game starts) */
   autoFullscreen?: boolean;
-  /** 완료 콜백 */
+  /** Completion callback */
   onComplete?: (score: ScoreState, cleared: boolean) => void;
-  /** 종료 콜백 (뒤로가기) */
+  /** Exit callback (back navigation) */
   onExit?: () => void;
 }
 
-// ============ 서브 컴포넌트 ============
+// ============ Subcomponents ============
 
-/** 로딩 화면 */
+/** Loading screen */
 const LoadingScreen: React.FC<{ message?: string }> = ({ message = 'Loading...' }) => (
   <div
     style={{
@@ -62,8 +62,8 @@ const LoadingScreen: React.FC<{ message?: string }> = ({ message = 'Loading...' 
   </div>
 );
 
-/** 시작 대기 화면 */
-const ReadyScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
+/** Ready-to-start screen (currently unused — kept for future wiring) */
+const _ReadyScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
   <div
     style={{
       position: 'absolute',
@@ -98,7 +98,7 @@ const ReadyScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
   </div>
 );
 
-/** 일시정지 화면 */
+/** Pause screen */
 const PauseScreen: React.FC<{
   onResume: () => void;
   onRestart: () => void;
@@ -165,7 +165,7 @@ const PauseScreen: React.FC<{
   </div>
 );
 
-/** 결과 화면 */
+/** Result screen */
 const ResultScreen: React.FC<{
   score: ScoreState;
   cleared: boolean;
@@ -173,7 +173,7 @@ const ResultScreen: React.FC<{
   onRestart: () => void;
   onExit: () => void;
 }> = ({ score, cleared, gaugeType: _gaugeType, onRestart, onExit }) => {
-  // DJ 레벨 계산
+  // Compute DJ level
   const exScoreRate = score.totalNotes > 0 ? score.exScore / (score.totalNotes * 2) : 0;
   let djLevel = 'F';
   if (exScoreRate >= 8 / 9) djLevel = 'AAA';
@@ -200,7 +200,7 @@ const ResultScreen: React.FC<{
         fontFamily: 'sans-serif',
       }}
     >
-      {/* 클리어/실패 표시 */}
+      {/* Clear/failed indicator */}
       <div
         style={{
           fontSize: 48,
@@ -212,7 +212,7 @@ const ResultScreen: React.FC<{
         {cleared ? 'CLEAR!' : 'FAILED'}
       </div>
 
-      {/* DJ 레벨 */}
+      {/* DJ level */}
       <div
         style={{
           fontSize: 72,
@@ -224,20 +224,20 @@ const ResultScreen: React.FC<{
         {djLevel}
       </div>
 
-      {/* 풀콤보 표시 */}
+      {/* Full combo indicator */}
       {isFullCombo && (
         <div style={{ fontSize: 24, color: '#00ffff', marginBottom: 10 }}>
           FULL COMBO!
         </div>
       )}
 
-      {/* EX 스코어 */}
+      {/* EX score */}
       <div style={{ fontSize: 32, marginBottom: 20 }}>
         EX SCORE: <span style={{ color: '#ffcc00' }}>{score.exScore}</span>
         <span style={{ fontSize: 18, color: '#888' }}> / {score.totalNotes * 2}</span>
       </div>
 
-      {/* 판정 내역 */}
+      {/* Judgment breakdown */}
       <div
         style={{
           display: 'grid',
@@ -261,12 +261,12 @@ const ResultScreen: React.FC<{
         <div>{score.missCount}</div>
       </div>
 
-      {/* 맥스 콤보 */}
+      {/* Max combo */}
       <div style={{ fontSize: 20, marginBottom: 30 }}>
         MAX COMBO: <span style={{ color: '#00ffff' }}>{score.maxCombo}</span>
       </div>
 
-      {/* 버튼 */}
+      {/* Buttons */}
       <div style={{ display: 'flex', gap: 15 }}>
         <button
           onClick={onRestart}
@@ -301,7 +301,7 @@ const ResultScreen: React.FC<{
   );
 };
 
-/** 게이지 바 */
+/** Gauge bar */
 const GaugeBar: React.FC<{ value: number; type: GaugeType }> = ({ value, type }) => {
   const color = GaugeSystem.getColor(type);
   const isDanger = value < 30;
@@ -332,7 +332,7 @@ const GaugeBar: React.FC<{ value: number; type: GaugeType }> = ({ value, type })
           animation: isDanger ? 'blink 0.5s infinite' : undefined,
         }}
       />
-      {/* 80% 라인 (클리어 기준) */}
+      {/* 80% line (clear threshold) */}
       {(type === 'groove' || type === 'easy') && (
         <div
           style={{
@@ -349,7 +349,7 @@ const GaugeBar: React.FC<{ value: number; type: GaugeType }> = ({ value, type })
   );
 };
 
-// ============ 메인 컴포넌트 ============
+// ============ Main component ============
 
 export const GamePlayer: React.FC<GamePlayerProps> = ({
   notechart,
@@ -398,9 +398,9 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
     hiSpeed: currentHiSpeed,
   });
 
-  // playSide에 따른 레인 설정 계산
+  // Compute lane config based on playSide
   const laneConfig = useMemo(() => {
-    // notechart에서 keyMode 추출
+    // Extract keyMode from the notechart
     const keyMode = notechart?.getKeyMode?.('SC') || '7K';
     return getLaneConfigForSide(keyMode, playSide);
   }, [notechart, playSide]);
@@ -461,7 +461,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
     speedInfoTimerRef.current = setTimeout(() => setShowSpeedInfo(false), 1500);
   }, []);
 
-  // 결과 화면 표시 조건
+  // Result screen display condition
   const showResult = state.isCompleted || state.isFailed;
   const cleared = state.isCompleted && !state.isFailed;
 
@@ -494,7 +494,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
     };
   }, []);
 
-  // 자동 전체화면: 게임 시작 시 전체화면 진입
+  // Auto fullscreen: enter fullscreen when the game starts
   useEffect(() => {
     if (autoFullscreen && state.isPlaying && !isFullscreen && containerRef.current) {
       containerRef.current.requestFullscreen().catch((err) => {
@@ -503,21 +503,21 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
     }
   }, [autoFullscreen, state.isPlaying, isFullscreen]);
 
-  // 완료 콜백
+  // Completion callback
   useEffect(() => {
     if (showResult && state.finalScore) {
       onComplete?.(state.finalScore, cleared);
     }
   }, [showResult, state.finalScore, cleared, onComplete]);
 
-  // 게임 플레이 중 페이지 스크롤 방지
+  // Prevent page scrolling during gameplay
   useEffect(() => {
     if (!state.isPlaying && !state.isReady) return;
 
     const savedOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
-    // wheel 이벤트도 차단
+    // Block wheel events too
     const preventWheel = (e: WheelEvent) => { e.preventDefault(); };
     window.addEventListener('wheel', preventWheel, { passive: false });
 
@@ -527,7 +527,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
     };
   }, [state.isPlaying, state.isReady]);
 
-  // 키보드 이벤트 (ESC: 일시정지, Space: 시작, F11: 전체화면, ↑↓: 배속)
+  // Keyboard events (ESC: pause, Space: start, F11: fullscreen, arrows: speed)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Escape') {
@@ -535,12 +535,12 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
           actions.pause();
         }
       }
-      // 대기 화면에서 Space로 시작
+      // Start with Space from the ready screen
       if (e.code === 'Space' && state.isReady && !state.isPlaying && !showResult) {
         e.preventDefault();
         actions.start();
       }
-      // F11로 전체화면 토글
+      // Toggle fullscreen with F11
       if (e.code === 'F11') {
         e.preventDefault();
         toggleFullscreen();
@@ -607,7 +607,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [state.isPlaying, state.isPaused, state.isReady, showResult, actions, toggleFullscreen, currentBpm, baseBpm, flashSpeedInfo]);
 
-  // 종료 핸들러
+  // Exit handler
   const handleExit = useCallback(() => {
     actions.stop();
     // Exit fullscreen if active
@@ -637,7 +637,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
         alignItems: 'center',
       }}
     >
-      {/* 게임 캔버스 */}
+      {/* Game canvas */}
       {notechart && (
         <GameCanvas
           ref={canvasRef}
@@ -709,7 +709,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
         </div>
       )}
 
-      {/* 전체화면 토글 버튼 - 좌측 상단 (게임 통계 위) */}
+      {/* Fullscreen toggle button - top left (above the game stats) */}
       <button
         onClick={toggleFullscreen}
         style={{
@@ -729,15 +729,15 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
         {isFullscreen ? '⮌' : '⛶'}
       </button>
 
-      {/* 게이지 바 */}
+      {/* Gauge bar */}
       {state.isPlaying && !state.isPaused && (
         <GaugeBar value={state.gaugeValue} type={gaugeType} />
       )}
 
-      {/* 로딩 화면 */}
+      {/* Loading screen */}
       {state.isLoading && <LoadingScreen />}
 
-      {/* 시작 대기 화면 (with speed settings) */}
+      {/* Ready screen (with speed settings) */}
       {state.isReady && !state.isPlaying && !showResult && (
         <div
           style={{
@@ -815,7 +815,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
         </div>
       )}
 
-      {/* 일시정지 화면 */}
+      {/* Pause screen */}
       {state.isPaused && (
         <PauseScreen
           onResume={actions.resume}
@@ -824,7 +824,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
         />
       )}
 
-      {/* 결과 화면 */}
+      {/* Result screen */}
       {showResult && state.finalScore && (
         <ResultScreen
           score={state.finalScore}
@@ -835,7 +835,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
         />
       )}
 
-      {/* CSS 애니메이션 */}
+      {/* CSS animations */}
       <style>{`
         @keyframes blink {
           0%, 100% { opacity: 1; }

@@ -1,12 +1,12 @@
 /**
- * AudioLoader Worker 메시지 타입 (Discriminated Union)
+ * AudioLoader worker message types (discriminated union).
  *
- * Main ↔ Worker 경계의 페이로드를 한 곳에 모아 타입 안전성을 보장한다.
+ * Gathers the payloads crossing the Main ↔ Worker boundary in one place for type safety.
  * - `LoaderInbound`: Main → Worker
  * - `LoaderOutbound`: Worker → Main
  *
- * Worker 내부에서는 `postFromWorker`로 outbound 메시지를 보낼 수 있다.
- * `(self as unknown as { postMessage })` 같은 cast가 더 이상 필요 없다.
+ * Inside the worker, outbound messages can be sent with `postFromWorker`;
+ * casts like `(self as unknown as { postMessage })` are no longer needed.
  */
 import type {
     WorkerProgressPayload,
@@ -16,7 +16,7 @@ import type {
 } from './types';
 
 /**
- * Worker가 메인 스레드로부터 받는 메시지
+ * Messages the worker receives from the main thread.
  */
 export interface FileMap {
     [key: string]: string;
@@ -33,7 +33,7 @@ export type LoaderInbound = {
 };
 
 /**
- * Worker가 메인 스레드로 보내는 메시지
+ * Messages the worker sends to the main thread.
  */
 export type LoaderOutbound =
     | { type: 'PROGRESS'; payload: WorkerProgressPayload }
@@ -42,10 +42,10 @@ export type LoaderOutbound =
     | { type: 'ERROR'; payload: WorkerErrorPayload };
 
 /**
- * Worker `self` 협소화 헬퍼
+ * Worker `self` narrowing helper.
  *
- * `DedicatedWorkerGlobalScope`로 캐스트하여 광범위한 `WorkerGlobalScope.postMessage`
- * 시그니처 대신 union 타입으로 좁힌 postMessage를 사용한다.
+ * Casts to `DedicatedWorkerGlobalScope` so that postMessage is narrowed to the
+ * union type instead of the broad `WorkerGlobalScope.postMessage` signature.
  */
 export function postFromLoaderWorker(
     msg: LoaderOutbound,

@@ -54,6 +54,19 @@ See [`src/index.ts`](src/index.ts) for the full export list. Highlights:
 | `BmsPreviewPlayer` | Preview-mode player for chart editors |
 | `I18nProvider`, `useI18n` | i18n contract — see I18N.md |
 
+## Development
+
+```bash
+npm install       # on Windows use `npm install --include=dev` if devDeps are skipped
+npm run build     # vite build + .d.ts emit
+npm test          # vitest
+npm run format    # prettier (config: .prettierrc.json)
+```
+
+This package is **vendored** by `bms-electron-app` into `vendor/bms-player/` via npm
+workspaces. Keep the vendored copy in sync when changing the public API — see the
+workspace health report (`WORKSPACE_HEALTH_*.md`).
+
 ## Versioning
 
 Same rules as `bms-editor`. Adding an i18n key is minor; removing/renaming

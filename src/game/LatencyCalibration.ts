@@ -1,25 +1,25 @@
 /**
- * 오디오 레이턴시 보정 시스템
- * 시스템별 오디오 지연을 측정하고 보정
+ * Audio latency compensation system.
+ * Measures and compensates for per-system audio delay.
  */
 
 export interface LatencyConfig {
-  /** 오디오 출력 레이턴시 (ms) - 스피커/헤드폰 지연 */
+  /** Audio output latency (ms) - speaker/headphone delay */
   audioLatency: number;
-  /** 입력 레이턴시 (ms) - 키보드 지연 */
+  /** Input latency (ms) - keyboard delay */
   inputLatency: number;
-  /** 비주얼 레이턴시 (ms) - 모니터 지연 */
+  /** Visual latency (ms) - monitor delay */
   visualLatency: number;
 }
 
 export interface CalibrationResult {
-  /** 측정된 평균 레이턴시 */
+  /** Measured average latency */
   measuredLatency: number;
-  /** 측정 횟수 */
+  /** Number of samples */
   sampleCount: number;
-  /** 표준편차 */
+  /** Standard deviation */
   standardDeviation: number;
-  /** 신뢰도 (0-1) */
+  /** Confidence (0-1) */
   confidence: number;
 }
 
@@ -32,7 +32,7 @@ const DEFAULT_LATENCY: LatencyConfig = {
 };
 
 /**
- * 레이턴시 캘리브레이션 클래스
+ * Latency calibration class.
  */
 export class LatencyCalibration {
   private config: LatencyConfig;
@@ -41,7 +41,7 @@ export class LatencyCalibration {
   private isCalibrating: boolean = false;
 
   constructor(config?: Partial<LatencyConfig>) {
-    // 저장된 설정 로드 또는 기본값 사용
+    // Load saved config or use defaults
     const saved = this.loadConfig();
     this.config = {
       ...DEFAULT_LATENCY,
@@ -51,7 +51,7 @@ export class LatencyCalibration {
   }
 
   /**
-   * 저장된 설정 로드
+   * Loads the saved config.
    */
   private loadConfig(): Partial<LatencyConfig> {
     try {
@@ -60,31 +60,31 @@ export class LatencyCalibration {
         return JSON.parse(saved);
       }
     } catch {
-      // 로드 실패 시 무시
+      // Ignore load failures
     }
     return {};
   }
 
   /**
-   * 설정 저장
+   * Saves the config.
    */
   saveConfig(): void {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.config));
     } catch {
-      // 저장 실패 시 무시
+      // Ignore save failures
     }
   }
 
   /**
-   * 현재 설정 반환
+   * Returns the current config.
    */
   getConfig(): LatencyConfig {
     return { ...this.config };
   }
 
   /**
-   * 설정 업데이트
+   * Updates the config.
    */
   setConfig(config: Partial<LatencyConfig>): void {
     this.config = { ...this.config, ...config };
@@ -92,32 +92,32 @@ export class LatencyCalibration {
   }
 
   /**
-   * 총 보정값 (ms)
-   * 오디오 재생 시점 조정에 사용
+   * Total compensation value (ms).
+   * Used to adjust audio playback timing.
    */
   getTotalAudioOffset(): number {
     return this.config.audioLatency;
   }
 
   /**
-   * 판정 보정값 (ms)
-   * 입력 판정 시점 조정에 사용
+   * Judgment compensation value (ms).
+   * Used to adjust input judgment timing.
    */
   getJudgmentOffset(): number {
     return this.config.inputLatency;
   }
 
   /**
-   * 비주얼 보정값 (ms)
-   * 노트 표시 시점 조정에 사용
+   * Visual compensation value (ms).
+   * Used to adjust note display timing.
    */
   getVisualOffset(): number {
     return this.config.visualLatency;
   }
 
   /**
-   * 자동 캘리브레이션 시작
-   * 클릭 소리를 들려주고 사용자가 타이밍에 맞춰 키를 누르면 레이턴시 측정
+   * Starts automatic calibration.
+   * Plays click sounds and measures latency as the user presses a key in time.
    */
   async startCalibration(
     audioContext: AudioContext,
@@ -132,13 +132,13 @@ export class LatencyCalibration {
     this.isCalibrating = true;
 
     const TOTAL_SAMPLES = 10;
-    const INTERVAL = 1000; // 1초 간격으로 비프음
+    const INTERVAL = 1000; // Beep every 1 second
 
     return new Promise((resolve) => {
       let sampleIndex = 0;
       let expectedTime = 0;
 
-      // 키 입력 핸들러
+      // Key input handler
       const handleKeyDown = (e: KeyboardEvent) => {
         if (!this.isCalibrating || expectedTime === 0) return;
         if (e.repeat) return;
@@ -146,7 +146,7 @@ export class LatencyCalibration {
         const inputTime = performance.now();
         const offset = inputTime - expectedTime;
 
-        // 합리적인 범위 내의 입력만 수집 (-500ms ~ +500ms)
+        // Collect only inputs within a reasonable range (-500ms to +500ms)
         if (Math.abs(offset) < 500) {
           this.calibrationSamples.push(offset);
           onProgress?.(this.calibrationSamples.length, TOTAL_SAMPLES);
@@ -155,17 +155,17 @@ export class LatencyCalibration {
 
       window.addEventListener('keydown', handleKeyDown);
 
-      // 비프음 재생
+      // Play the beep
       const playBeep = () => {
         if (!this.audioContext || sampleIndex >= TOTAL_SAMPLES) {
-          // 캘리브레이션 완료
+          // Calibration complete
           window.removeEventListener('keydown', handleKeyDown);
           this.isCalibrating = false;
           resolve(this.calculateResult());
           return;
         }
 
-        // 비프음 생성
+        // Generate the beep
         const oscillator = this.audioContext.createOscillator();
         const gainNode = this.audioContext.createGain();
 
@@ -178,7 +178,7 @@ export class LatencyCalibration {
         gainNode.gain.setValueAtTime(0.3, this.audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.1);
 
-        // 예상 입력 시간 기록 (오디오 컨텍스트 시간 기준)
+        // Record the expected input time (based on the audio context time)
         expectedTime = performance.now();
 
         oscillator.start(this.audioContext.currentTime);
@@ -186,17 +186,17 @@ export class LatencyCalibration {
 
         sampleIndex++;
 
-        // 다음 비프음 예약
+        // Schedule the next beep
         setTimeout(playBeep, INTERVAL);
       };
 
-      // 1초 후 시작
+      // Start after 1 second
       setTimeout(playBeep, 1000);
     });
   }
 
   /**
-   * 캘리브레이션 결과 계산
+   * Computes the calibration result.
    */
   private calculateResult(): CalibrationResult {
     const samples = this.calibrationSamples;
@@ -210,16 +210,16 @@ export class LatencyCalibration {
       };
     }
 
-    // 평균 계산
+    // Compute the mean
     const sum = samples.reduce((a, b) => a + b, 0);
     const mean = sum / samples.length;
 
-    // 표준편차 계산
+    // Compute the standard deviation
     const squaredDiffs = samples.map((s) => Math.pow(s - mean, 2));
     const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / samples.length;
     const stdDev = Math.sqrt(avgSquaredDiff);
 
-    // 신뢰도 (샘플 수와 표준편차 기반)
+    // Confidence (based on sample count and standard deviation)
     const confidence = Math.min(1, (samples.length / 10) * Math.max(0, 1 - stdDev / 100));
 
     return {
@@ -231,7 +231,7 @@ export class LatencyCalibration {
   }
 
   /**
-   * 캘리브레이션 취소
+   * Cancels calibration.
    */
   cancelCalibration(): void {
     this.isCalibrating = false;
@@ -239,7 +239,7 @@ export class LatencyCalibration {
   }
 
   /**
-   * 캘리브레이션 결과를 설정에 적용
+   * Applies the calibration result to the config.
    */
   applyCalibrationResult(result: CalibrationResult): void {
     if (result.confidence >= 0.5) {
@@ -249,7 +249,7 @@ export class LatencyCalibration {
   }
 
   /**
-   * 설정 초기화
+   * Resets the config.
    */
   reset(): void {
     this.config = { ...DEFAULT_LATENCY };

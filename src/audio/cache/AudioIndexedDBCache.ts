@@ -1,10 +1,10 @@
 /**
  * AudioIndexedDBCache
  *
- * IndexedDB 기반 오디오 파일 캐시
- * - ArrayBuffer를 영구 저장
- * - LRU 기반 자동 정리
- * - 만료 시간 관리
+ * IndexedDB-backed audio file cache.
+ * - Persists ArrayBuffers.
+ * - LRU-based automatic cleanup.
+ * - Expiration-time management.
  */
 
 const DB_NAME = 'rhythm-archive-audio-cache';
@@ -12,16 +12,16 @@ const DB_VERSION = 1;
 const STORE_NAME = 'audio-files';
 const METADATA_STORE = 'cache-metadata';
 
-// 캐시 설정
-const MAX_CACHE_SIZE_MB = 500; // 최대 500MB
-const MAX_CACHE_ENTRIES = 2000; // 최대 2000개 파일
-const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7일
+// Cache settings.
+const MAX_CACHE_SIZE_MB = 500; // Up to 500 MB.
+const MAX_CACHE_ENTRIES = 2000; // Up to 2000 files.
+const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days.
 
 export interface CachedAudioEntry {
-  key: string; // URL 기반 키
+  key: string; // URL-based key.
   data: ArrayBuffer;
   size: number;
-  timestamp: number; // 마지막 접근 시간
+  timestamp: number; // Last access time.
   createdAt: number;
   expiresAt: number;
 }
@@ -37,10 +37,10 @@ class AudioIndexedDBCache {
   private initPromise: Promise<void> | null = null;
   private isInitialized = false;
   private lastCleanupTime = 0;
-  private readonly CLEANUP_DEBOUNCE_MS = 30_000; // 최소 30초 간격
+  private readonly CLEANUP_DEBOUNCE_MS = 30_000; // At least 30 s apart.
 
   /**
-   * IndexedDB 초기화
+   * Initializes IndexedDB.
    */
   async init(): Promise<void> {
     if (this.isInitialized) return;
@@ -63,14 +63,14 @@ class AudioIndexedDBCache {
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
 
-        // 오디오 파일 저장소
+        // Audio file store.
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const store = db.createObjectStore(STORE_NAME, { keyPath: 'key' });
           store.createIndex('timestamp', 'timestamp', { unique: false });
           store.createIndex('expiresAt', 'expiresAt', { unique: false });
         }
 
-        // 메타데이터 저장소
+        // Metadata store.
         if (!db.objectStoreNames.contains(METADATA_STORE)) {
           db.createObjectStore(METADATA_STORE, { keyPath: 'id' });
         }
@@ -81,7 +81,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * 캐시에서 오디오 데이터 조회
+   * Reads audio data from the cache.
    */
   async get(key: string): Promise<ArrayBuffer | null> {
     await this.init();
@@ -100,14 +100,14 @@ class AudioIndexedDBCache {
           return;
         }
 
-        // 만료 확인
+        // Expiration check.
         if (entry.expiresAt < Date.now()) {
           store.delete(key);
           resolve(null);
           return;
         }
 
-        // LRU: 타임스탬프 업데이트
+        // LRU: refresh the timestamp.
         entry.timestamp = Date.now();
         store.put(entry);
 
@@ -122,7 +122,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * 오디오 데이터 캐시에 저장
+   * Stores audio data in the cache.
    */
   async set(key: string, data: ArrayBuffer, ttlMs: number = DEFAULT_TTL_MS): Promise<void> {
     await this.init();
@@ -144,7 +144,7 @@ class AudioIndexedDBCache {
       const request = store.put(entry);
 
       request.onsuccess = () => {
-        // 비동기로 캐시 정리 실행
+        // Run cache cleanup asynchronously.
         this.maybeCleanup().catch(console.warn);
         resolve();
       };
@@ -157,7 +157,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * 여러 키를 한번에 조회 (배치)
+   * Reads multiple keys at once (batch).
    */
   async getMany(keys: string[]): Promise<Map<string, ArrayBuffer>> {
     await this.init();
@@ -186,7 +186,7 @@ class AudioIndexedDBCache {
 
           if (entry && entry.expiresAt >= now) {
             results.set(key, entry.data);
-            // LRU 업데이트
+            // LRU update.
             entry.timestamp = now;
             store.put(entry);
           }
@@ -208,7 +208,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * 여러 항목을 한번에 저장 (배치)
+   * Stores multiple entries at once (batch).
    */
   async setMany(entries: Array<{ key: string; data: ArrayBuffer }>): Promise<void> {
     await this.init();
@@ -245,7 +245,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * 캐시 항목 삭제
+   * Deletes a cache entry.
    */
   async delete(key: string): Promise<void> {
     await this.init();
@@ -262,7 +262,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * 특정 URL 패턴의 캐시 삭제 (예: 특정 레포지토리의 모든 파일)
+   * Deletes cached entries matching a URL prefix (e.g. every file of a repository).
    */
   async deleteByPrefix(prefix: string): Promise<number> {
     await this.init();
@@ -293,7 +293,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * 캐시 통계 조회
+   * Reads cache statistics.
    */
   async getStats(): Promise<{ totalSize: number; entryCount: number; oldestEntry: number | null }> {
     await this.init();
@@ -329,7 +329,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * 필요시 캐시 정리 (LRU) — 최소 30초 간격으로 디바운스
+   * Cleans up the cache when needed (LRU) — debounced to at least 30 s apart.
    */
   private async maybeCleanup(): Promise<void> {
     const now = Date.now();
@@ -339,14 +339,14 @@ class AudioIndexedDBCache {
     const stats = await this.getStats();
     const maxSizeBytes = MAX_CACHE_SIZE_MB * 1024 * 1024;
 
-    // 용량 또는 개수 초과시 정리
+    // Clean up when size or entry count is exceeded.
     if (stats.totalSize > maxSizeBytes || stats.entryCount > MAX_CACHE_ENTRIES) {
-      await this.cleanup(Math.floor(stats.entryCount * 0.2)); // 20% 삭제
+      await this.cleanup(Math.floor(stats.entryCount * 0.2)); // Delete 20%.
     }
   }
 
   /**
-   * 오래된 항목 정리 (LRU)
+   * Cleans up the oldest entries (LRU).
    */
   async cleanup(count: number = 100): Promise<number> {
     await this.init();
@@ -377,7 +377,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * 만료된 항목 정리
+   * Cleans up expired entries.
    */
   async cleanupExpired(): Promise<number> {
     await this.init();
@@ -411,7 +411,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * 전체 캐시 삭제
+   * Clears the entire cache.
    */
   async clear(): Promise<void> {
     await this.init();
@@ -431,7 +431,7 @@ class AudioIndexedDBCache {
   }
 
   /**
-   * DB 연결 닫기
+   * Closes the DB connection.
    */
   close(): void {
     if (this.db) {
@@ -443,5 +443,5 @@ class AudioIndexedDBCache {
   }
 }
 
-// 싱글톤 인스턴스
+// Singleton instance.
 export const audioIndexedDBCache = new AudioIndexedDBCache();

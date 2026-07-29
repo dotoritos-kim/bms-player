@@ -1,6 +1,6 @@
 /**
- * BMS 판정 엔진
- * #RANK, #DEFEXRANK 기반 판정 시스템 구현
+ * BMS judgment engine.
+ * Implements the judgment system based on #RANK and #DEFEXRANK.
  */
 
 export type Judgment = 'PGREAT' | 'GREAT' | 'GOOD' | 'BAD' | 'POOR' | 'MISS';
@@ -15,14 +15,14 @@ export interface JudgmentWindows {
 
 export interface JudgmentResult {
   judgment: Judgment;
-  offset: number;           // ms (음수=FAST, 양수=SLOW)
+  offset: number;           // ms (negative=FAST, positive=SLOW)
   timing: TimingIndicator;
   isComboBreak: boolean;
 }
 
 export type JudgmentStyle = 'lr2' | 'beatoraja' | 'iidx';
 
-// LR2 스타일 판정 창 (#RANK 기반)
+// LR2-style judgment windows (based on #RANK)
 const LR2_JUDGMENT_WINDOWS: Record<number, JudgmentWindows> = {
   0: { pgreat: 8,  great: 24,  good: 40,   bad: 200 },  // VERY HARD
   1: { pgreat: 15, great: 30,  good: 60,   bad: 200 },  // HARD
@@ -31,7 +31,7 @@ const LR2_JUDGMENT_WINDOWS: Record<number, JudgmentWindows> = {
   4: { pgreat: 25, great: 75,  good: 150,  bad: 200 },  // VERY EASY
 };
 
-// beatoraja 스타일 판정 창
+// beatoraja-style judgment windows
 const BEATORAJA_JUDGMENT_WINDOWS: Record<number, JudgmentWindows> = {
   0: { pgreat: 5,  great: 15,  good: 37,   bad: 200 },  // VERY HARD
   1: { pgreat: 10, great: 30,  good: 75,   bad: 200 },  // HARD
@@ -40,7 +40,7 @@ const BEATORAJA_JUDGMENT_WINDOWS: Record<number, JudgmentWindows> = {
   4: { pgreat: 25, great: 75,  good: 187,  bad: 200 },  // VERY EASY
 };
 
-// IIDX 스타일 판정 창 (고정)
+// IIDX-style judgment windows (fixed)
 const IIDX_JUDGMENT_WINDOWS: JudgmentWindows = {
   pgreat: 16.67,
   great: 33.33,
@@ -50,9 +50,9 @@ const IIDX_JUDGMENT_WINDOWS: JudgmentWindows = {
 
 export interface JudgmentEngineConfig {
   rank: number;              // 0-4
-  defexrank?: number;        // 커스텀 판정 (100 = NORMAL)
+  defexrank?: number;        // Custom judgment (100 = NORMAL)
   style: JudgmentStyle;
-  exrankMode?: boolean;      // All or Nothing 모드
+  exrankMode?: boolean;      // All or Nothing mode
 }
 
 export class JudgmentEngine {
@@ -65,8 +65,8 @@ export class JudgmentEngine {
     this.exrankMode = exrankMode;
 
     if (defexrank !== undefined) {
-      // #DEFEXRANK 기반 커스텀 판정
-      // #DEFEXRANK 100 기준 PGREAT = ±16ms, ±1 = ±0.16ms
+      // Custom judgment based on #DEFEXRANK
+      // At #DEFEXRANK 100, PGREAT = ±16ms; ±1 = ±0.16ms
       const pgreatMs = defexrank * 0.16;
       this.windows = {
         pgreat: pgreatMs,
@@ -79,29 +79,29 @@ export class JudgmentEngine {
     } else if (style === 'beatoraja') {
       this.windows = { ...(BEATORAJA_JUDGMENT_WINDOWS[rank] ?? BEATORAJA_JUDGMENT_WINDOWS[2]) };
     } else {
-      // LR2 스타일 (기본)
+      // LR2 style (default)
       this.windows = { ...(LR2_JUDGMENT_WINDOWS[rank] ?? LR2_JUDGMENT_WINDOWS[2]) };
     }
   }
 
   /**
-   * 입력 시간과 노트 시간을 비교하여 판정
-   * @param inputTime 입력 시간 (ms, performance.now 기준)
-   * @param noteTime 노트 시간 (ms, 게임 시작 기준)
+   * Judges by comparing the input time against the note time.
+   * @param inputTime Input time (ms, based on performance.now)
+   * @param noteTime Note time (ms, relative to game start)
    */
   judge(inputTime: number, noteTime: number): JudgmentResult {
-    const offset = inputTime - noteTime;  // 음수 = FAST, 양수 = SLOW
+    const offset = inputTime - noteTime;  // negative = FAST, positive = SLOW
     const absOffset = Math.abs(offset);
 
     let judgment: Judgment;
 
     if (this.exrankMode) {
-      // All or Nothing 모드 (#EXRANK)
-      // PGREAT 1프레임(~16.67ms) 또는 BAD
+      // All or Nothing mode (#EXRANK)
+      // PGREAT within 1 frame (~16.67ms), otherwise BAD
       const frameMs = 16.67;
       judgment = absOffset <= frameMs ? 'PGREAT' : 'BAD';
     } else {
-      // 일반 판정
+      // Normal judgment
       if (absOffset <= this.windows.pgreat) {
         judgment = 'PGREAT';
       } else if (absOffset <= this.windows.great) {
@@ -124,14 +124,14 @@ export class JudgmentEngine {
   }
 
   /**
-   * 노트가 판정 창을 완전히 벗어났는지 확인 (MISS 판정용)
+   * Checks whether the note has fully left the judgment window (for MISS judgment).
    */
   isMissed(currentTime: number, noteTime: number): boolean {
     return currentTime - noteTime > this.windows.bad;
   }
 
   /**
-   * 노트가 판정 가능한 범위 내에 있는지 확인
+   * Checks whether the note is within the judgeable range.
    */
   isInJudgmentRange(currentTime: number, noteTime: number): boolean {
     const offset = Math.abs(currentTime - noteTime);
@@ -139,24 +139,24 @@ export class JudgmentEngine {
   }
 
   /**
-   * 노트가 아직 도달하지 않았는지 확인 (미래 노트)
+   * Checks whether the note has not arrived yet (future note).
    */
   isUpcoming(currentTime: number, noteTime: number): boolean {
     return noteTime - currentTime > this.windows.bad;
   }
 
   /**
-   * 콤보 브레이크 여부 확인
+   * Checks whether the judgment breaks the combo.
    */
   isComboBreak(judgment: Judgment): boolean {
     return judgment === 'BAD' || judgment === 'POOR' || judgment === 'MISS';
   }
 
   /**
-   * FAST/SLOW 타이밍 표시
+   * FAST/SLOW timing indicator.
    */
   private getTimingIndicator(offset: number, judgment: Judgment): TimingIndicator {
-    // PGREAT 중앙 2ms 이내는 JUST
+    // Within 2ms of PGREAT center counts as JUST
     if (judgment === 'PGREAT' && Math.abs(offset) <= 2) {
       return 'JUST';
     }
@@ -164,21 +164,21 @@ export class JudgmentEngine {
   }
 
   /**
-   * 현재 판정 창 설정 반환
+   * Returns the current judgment window settings.
    */
   getWindows(): JudgmentWindows {
     return { ...this.windows };
   }
 
   /**
-   * EXRANK 모드 설정
+   * Sets EXRANK mode.
    */
   setExrankMode(enabled: boolean): void {
     this.exrankMode = enabled;
   }
 
   /**
-   * 판정에 따른 EX 스코어 반환
+   * Returns the EX score for a judgment.
    */
   static getExScore(judgment: Judgment): number {
     switch (judgment) {
@@ -189,7 +189,7 @@ export class JudgmentEngine {
   }
 
   /**
-   * 판정 레이블 반환
+   * Returns the judgment label.
    */
   static getLabel(judgment: Judgment): string {
     switch (judgment) {
@@ -203,16 +203,16 @@ export class JudgmentEngine {
   }
 
   /**
-   * 판정 색상 반환 (CSS 색상)
+   * Returns the judgment color (CSS color).
    */
   static getColor(judgment: Judgment): string {
     switch (judgment) {
-      case 'PGREAT': return '#00ffff';  // 시안
-      case 'GREAT': return '#ffff00';   // 노랑
-      case 'GOOD': return '#00ff00';    // 초록
-      case 'BAD': return '#ff6600';     // 주황
-      case 'POOR': return '#ff0000';    // 빨강
-      case 'MISS': return '#808080';    // 회색
+      case 'PGREAT': return '#00ffff';  // Cyan
+      case 'GREAT': return '#ffff00';   // Yellow
+      case 'GOOD': return '#00ff00';    // Green
+      case 'BAD': return '#ff6600';     // Orange
+      case 'POOR': return '#ff0000';    // Red
+      case 'MISS': return '#808080';    // Gray
     }
   }
 }

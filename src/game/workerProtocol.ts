@@ -1,5 +1,5 @@
 /**
- * Worker ↔ Main Thread 통신 프로토콜 타입 정의
+ * Worker ↔ Main Thread communication protocol type definitions.
  */
 
 import type { GameNote, SoundedEvent } from '../audio/judgements';
@@ -11,12 +11,12 @@ import type { KeyColumn } from './InputHandler';
 
 // ==================== Serializable Notechart Data ====================
 
-/** Worker로 전송 가능한 순수 데이터 형태의 Notechart */
+/** Pure-data form of a Notechart that can be sent to a Worker */
 export interface SerializedNotechart {
   notes: GameNote[];
   autos: SoundedEvent[];
   landmines: GameNote[];
-  /** Timing 재생성용 — beat→seconds 변환 테이블 (미리 계산) */
+  /** For timing reconstruction — beat→seconds conversion table (precomputed) */
   beatToSecondsTable: Array<{ beat: number; seconds: number }>;
   duration: number;
 }
@@ -94,15 +94,15 @@ export interface NextNotePayload {
 
 /** Serialized version of GameEngineState (Set → Array for postMessage) */
 export interface SerializedGameState {
-  /** Stage 3 — discriminated union (Worker→Main 직렬화에 안전한 plain object). */
+  /** Stage 3 — discriminated union (plain object safe for Worker→Main serialization). */
   phase: GamePhase;
-  /** @deprecated `phase`로부터 derive. */
+  /** @deprecated Derived from `phase`. */
   isPlaying: boolean;
-  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'paused'`. */
   isPaused: boolean;
-  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'failed'`. */
   isFailed: boolean;
-  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'completed'`. */
   isCompleted: boolean;
   currentTime: number;
   visualTime: number;

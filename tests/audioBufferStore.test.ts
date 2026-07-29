@@ -1,12 +1,12 @@
 /**
- * AudioBufferStore 단위 테스트
- * Web Audio API 없는 환경에서 실행되므로 AudioBuffer는 간단한 stub을 사용한다.
+ * AudioBufferStore unit tests.
+ * Runs in an environment without the Web Audio API, so AudioBuffer uses a simple stub.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AudioBufferStore } from '../src/audio/pipeline/AudioBufferStore';
 
-// AudioBuffer stub (JSDOM에는 AudioBuffer가 없음)
+// AudioBuffer stub (JSDOM has no AudioBuffer)
 function makeStubBuffer(id: number): AudioBuffer {
     return { duration: id * 0.1, numberOfChannels: 1, sampleRate: 44100 } as unknown as AudioBuffer;
 }
@@ -15,7 +15,7 @@ describe('AudioBufferStore', () => {
     let store: AudioBufferStore;
 
     beforeEach(() => {
-        // useGlobalCache=false 로 격리 (전역 Map 오염 방지)
+        // Isolated with useGlobalCache=false (prevents polluting the global Map)
         store = new AudioBufferStore('test-prefix', false);
     });
 

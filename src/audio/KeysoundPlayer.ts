@@ -1,17 +1,17 @@
 /**
  * KeysoundPlayer
  *
- * BMS 키사운드를 로드하고 재생하는 커스텀 AudioPreloader 기반 플레이어
- * AudioWorklet을 사용하여 저지연 오디오 재생을 제공합니���.
- * resolveKeysoundFiles를 통한 stem 기반 파일 해석을 지원합니다.
+ * AudioPreloader-backed player that loads and plays BMS keysounds.
+ * Uses AudioWorklet for low-latency audio playback and supports
+ * stem-based file resolution via `resolveKeysoundFiles`.
  */
 
 import { AudioPreloader, type FileMap, type WorkerFactory, type AudioPreloaderOptions } from './loader/AudioPreloader';
 import { resolveKeysoundFiles, type ResolveOptions, type AudioFileMapFetcher } from './loader/resolveKeysoundFiles';
 
 /**
- * 모니터 프레임 주기를 측정하여 초 단위로 반환
- * rAF 10프레임 샘플링 → 평균 프레임 간격
+ * Measures the monitor's frame interval (in seconds).
+ * Samples 10 rAF callbacks and returns the mean delta.
  */
 function detectFrameDuration(): Promise<number> {
   return new Promise((resolve) => {
@@ -36,32 +36,32 @@ export interface KeysoundPlayerResolveConfig {
   slug: string;
   /** Branch, tag, or commit SHA */
   ref: string;
-  /** BMS 파일이 위치한 디렉토리 경로 (루트면 빈 문자열) */
+  /** Directory of the BMS file (empty string if at root). */
   dir: string;
-  /** 오디오 파일 매핑을 가져오는 fetcher (환경별 주입) */
+  /** Fetcher that returns the audio-file mapping (injected per environment). */
   fetcher: AudioFileMapFetcher;
 }
 
 export interface KeysoundPlayerOptions {
-  /** 기본 URL (BMS 파일이 있는 디렉토리) */
+  /** Base URL (the directory containing the BMS file). */
   baseUrl: string;
-  /** 키사운드 매핑 (ID -> 파일명) */
+  /** Keysound map (ID → filename). */
   keysounds: Record<string, string>;
-  /** 볼륨 (0.0 ~ 1.0) */
+  /** Volume (0.0 – 1.0). */
   volume?: number;
-  /** 로드 진행 콜백 */
+  /** Load progress callback. */
   onProgress?: (loaded: number, total: number) => void;
-  /** 로드 완료 콜백 */
+  /** Load-ready callback. */
   onReady?: () => void;
-  /** 에러 콜백 */
+  /** Error callback. */
   onError?: (error: string) => void;
-  /** 성능 최적화 옵션 (기본: 활���화) */
+  /** Performance-mode flag (default: enabled). */
   performanceMode?: boolean;
-  /** 간소화된 이펙트 사�� (기본: false) */
+  /** Use simplified effects (default: false). */
   simplifiedEffects?: boolean;
-  /** Worker 팩토리 (AudioLoader Worker 인스턴스를 생성하는 함수) */
+  /** Worker factory that constructs an AudioLoader worker instance. */
   workerFactory?: WorkerFactory;
-  /** stem 기반 파일 해석 설정 (없으면 직접 fileMap 사용) */
+  /** Stem-based file-resolution config (omit to use the fileMap directly). */
   resolve?: KeysoundPlayerResolveConfig;
 }
 
@@ -77,11 +77,11 @@ export class KeysoundPlayer {
   private _isRecovering = false;
   private preloaderOptions: AudioPreloaderOptions;
 
-  // 디버깅용: 로드 실패한 키사운드 추적
+  // Debug helpers — track keysounds that failed to load.
   private _failedKeysounds: Map<string, string> = new Map();
   private _loadedKeysounds: Set<string> = new Set();
 
-  // 키사운드별 재생 레이턴시 측정
+  // Per-keysound playback latency samples.
   private _playLatencies: number[] = [];
   private readonly _maxLatencySamples = 100;
 
@@ -105,7 +105,7 @@ export class KeysoundPlayer {
       useCache: true,
     };
 
-    // resolve 모드가 아닌 경우 즉시 fileMap 빌드
+    // Outside resolve mode, build fileMap immediately.
     if (!this.options.resolve) {
       this.buildFileMap();
     }
@@ -140,7 +140,7 @@ export class KeysoundPlayer {
     if (Object.keys(resolved).length > 0) {
       this.fileMap = resolved;
     } else {
-      // resolve 실패 시 원본 fileMap으로 폴백
+      // Resolve failed — fall back to the raw fileMap.
       console.warn('[KeysoundPlayer] Resolve returned no results, falling back to raw filenames');
       this.buildFileMap();
     }
@@ -163,7 +163,7 @@ export class KeysoundPlayer {
   async init(): Promise<void> {
     if (this._preloader) return;
 
-    // resolve 모드인 경우 파일 매핑 해석
+    // In resolve mode, run the file-mapping resolver before decoding.
     if (this.options.resolve) {
       await this.buildFileMapResolved();
     }
@@ -272,11 +272,11 @@ export class KeysoundPlayer {
   }
 
   /**
-   * 키사운드 재생
-   * @param keysoundId - 키사운드 ID
-   * @param offset - 재생 시작 위치 (초 단위, 기본: 0)
-   * @param scheduledTime - AudioContext 예약 시간 (0이면 즉시 재생)
-   * @param volume - 볼륨 (0-1, 기본: 1)
+   * Plays a keysound.
+   * @param keysoundId - keysound ID
+   * @param offset - playback start offset in seconds (default 0)
+   * @param scheduledTime - scheduled AudioContext time (0 = play immediately)
+   * @param volume - volume (0-1, default 1)
    */
   play(keysoundId: string, offset = 0, scheduledTime = 0, volume = 1): void {
     if (!this._preloader || !this._isReady) {
@@ -514,11 +514,12 @@ export class KeysoundPlayer {
   }
 
   /**
-   * 내부 `AudioContext` 를 노출한다.
+   * Exposes the internal `AudioContext`.
    *
-   * `useGamePlayer` 등이 KeysoundPlayer 캡슐화를 깨는 cast (`as unknown as { preloader }`)
-   * 없이 AudioContext 에 접근할 수 있게 하기 위한 인터페이스 메서드 (`types/KeysoundPlayer.ts`
-   * 의 optional `getAudioContext`).
+   * Provided so consumers like `useGamePlayer` can reach the AudioContext
+   * without breaking KeysoundPlayer's encapsulation through casts such as
+   * `as unknown as { preloader }`. Implements the optional
+   * `getAudioContext` from `types/KeysoundPlayer.ts`.
    */
   getAudioContext(): AudioContext | null {
     return this._preloader?.context ?? null;
@@ -558,7 +559,7 @@ export class KeysoundPlayer {
 }
 
 /**
- * 키사운드 플레이어를 생성하고 로드하는 헬퍼 함수
+ * Helper that constructs a KeysoundPlayer and runs its load sequence.
  */
 export async function createKeysoundPlayer(
   options: KeysoundPlayerOptions

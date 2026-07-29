@@ -1,7 +1,7 @@
 /**
  * BmsPreviewPlayer Component
  *
- * BMS 미리듣기 재생을 위한 UI 컴포넌트
+ * UI component for BMS preview playback.
  */
 
 import { useEffect, useCallback, useRef } from 'react';
@@ -35,16 +35,16 @@ const IconMusic = ({ className }: { className?: string }) => (
 );
 
 export interface BmsPreviewPlayerProps extends Omit<BmsPreviewOptions, 'onProgress' | 'onError'> {
-    /** 자동 로드 여부 */
+    /** Whether to load automatically */
     autoLoad?: boolean;
-    /** 컴팩트 모드 (작은 플레이어) */
+    /** Compact mode (small player) */
     compact?: boolean;
-    /** 추가 클래스명 */
+    /** Additional class name */
     className?: string;
 }
 
 /**
- * 시간을 MM:SS 형식으로 포맷
+ * Formats time as MM:SS.
  */
 function formatTime(seconds: number): string {
     const mins = Math.floor(seconds / 60);
@@ -70,7 +70,7 @@ export function BmsPreviewPlayer({
 
     const pendingPlayRef = useRef(false);
 
-    // 자동 로드
+    // Auto load
     useEffect(() => {
         if (autoLoad && state.status === 'idle') {
             controls.load();
@@ -109,7 +109,7 @@ export function BmsPreviewPlayer({
         [state.status, state.duration, controls]
     );
 
-    // 컴팩트 모드
+    // Compact mode
     if (compact) {
         return (
             <div
@@ -151,7 +151,7 @@ export function BmsPreviewPlayer({
         );
     }
 
-    // 풀 플레이어
+    // Full player
     return (
         <div
             className={cn(
@@ -159,7 +159,7 @@ export function BmsPreviewPlayer({
                 className
             )}
         >
-            {/* 헤더 */}
+            {/* Header */}
             <div className="flex items-center gap-2 mb-3">
                 <IconMusic className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Preview</span>
@@ -170,7 +170,7 @@ export function BmsPreviewPlayer({
                 )}
             </div>
 
-            {/* 에러 상태 */}
+            {/* Error state */}
             {state.status === 'error' && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive mb-3">
                     <IconAlert className="w-4 h-4 flex-shrink-0" />
@@ -178,7 +178,7 @@ export function BmsPreviewPlayer({
                 </div>
             )}
 
-            {/* 로딩 진행률 */}
+            {/* Loading progress */}
             {state.status === 'loading' && (
                 <div className="mb-3">
                     <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
@@ -194,7 +194,7 @@ export function BmsPreviewPlayer({
                 </div>
             )}
 
-            {/* 재생 진행률 */}
+            {/* Playback progress */}
             <div className="mb-3">
                 <div
                     className="h-2 bg-muted rounded-full cursor-pointer overflow-hidden group"
@@ -216,10 +216,10 @@ export function BmsPreviewPlayer({
                 </div>
             </div>
 
-            {/* 컨트롤 */}
+            {/* Controls */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    {/* 재생/일시정지 버튼 */}
+                    {/* Play/pause button */}
                     <button
                         onClick={handlePlayPause}
                         disabled={state.status === 'loading' || state.status === 'error'}
@@ -234,7 +234,7 @@ export function BmsPreviewPlayer({
                         )}
                     </button>
 
-                    {/* 정지 버튼 */}
+                    {/* Stop button */}
                     <button
                         onClick={controls.stop}
                         disabled={
@@ -248,7 +248,7 @@ export function BmsPreviewPlayer({
                     </button>
                 </div>
 
-                {/* 볼륨 컨트롤 */}
+                {/* Volume controls */}
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => controls.setVolume(volume > 0 ? 0 : 0.8)}
