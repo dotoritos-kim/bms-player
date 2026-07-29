@@ -18,7 +18,7 @@ export type PlaySide = '1P' | '2P' | 'DP';
 
 // ── 定数 ──────────────────────────────────────────────────────────────────
 
-// 기본 7K+SC (IIDX SP 1P) 레인 설정 — 스크래치 왼쪽
+// Default 7K+SC (IIDX SP 1P) lane config — scratch on the left
 export const DEFAULT_LANE_CONFIG: LaneConfig[] = [
   { column: 'SC', width: 60, color: '#ff3366', pressedColor: '#ff6699' },
   { column: '1',  width: 40, color: '#ffffff', pressedColor: '#aaaaaa' },
@@ -30,7 +30,7 @@ export const DEFAULT_LANE_CONFIG: LaneConfig[] = [
   { column: '7',  width: 40, color: '#ffffff', pressedColor: '#aaaaaa' },
 ];
 
-// 7K+SC (IIDX SP 2P) — 스크래치 오른쪽
+// 7K+SC (IIDX SP 2P) — scratch on the right
 export const LANE_CONFIG_7K_2P: LaneConfig[] = [
   { column: '1',  width: 40, color: '#ffffff', pressedColor: '#aaaaaa' },
   { column: '2',  width: 40, color: '#3399ff', pressedColor: '#66bbff' },
@@ -42,7 +42,7 @@ export const LANE_CONFIG_7K_2P: LaneConfig[] = [
   { column: 'SC', width: 60, color: '#ff3366', pressedColor: '#ff6699' },
 ];
 
-// 5K (beatmania 1P) — 스크래치 왼쪽
+// 5K (beatmania 1P) — scratch on the left
 export const LANE_CONFIG_5K: LaneConfig[] = [
   { column: 'SC', width: 60, color: '#ff3366', pressedColor: '#ff6699' },
   { column: '1',  width: 44, color: '#ffffff', pressedColor: '#aaaaaa' },
@@ -52,7 +52,7 @@ export const LANE_CONFIG_5K: LaneConfig[] = [
   { column: '5',  width: 44, color: '#ffffff', pressedColor: '#aaaaaa' },
 ];
 
-// 5K (beatmania 2P) — 스크래치 오른쪽
+// 5K (beatmania 2P) — scratch on the right
 export const LANE_CONFIG_5K_2P: LaneConfig[] = [
   { column: '1',  width: 44, color: '#ffffff', pressedColor: '#aaaaaa' },
   { column: '2',  width: 44, color: '#3399ff', pressedColor: '#66bbff' },
@@ -115,7 +115,7 @@ export const LANE_CONFIG_6K: LaneConfig[] = [
   { column: '6',  width: 42, color: '#3399ff', pressedColor: '#66bbff' },
 ];
 
-// 8K (SC 없음)
+// 8K (no SC)
 export const LANE_CONFIG_8K: LaneConfig[] = [
   { column: '1', width: 38, color: '#ff6b6b', pressedColor: '#ff9999' },
   { column: '2', width: 38, color: '#ffd93d', pressedColor: '#ffee88' },
@@ -147,7 +147,7 @@ export const LANE_CONFIG_10K_2P: LaneConfig[] = [
   { column: 'SC2', width: 50, color: '#ff3366', pressedColor: '#ff6699' },
 ];
 
-// 10K+2SC (5K+SC DP) 전체
+// 10K+2SC (5K+SC DP) full set
 export const LANE_CONFIG_10K: LaneConfig[] = [
   ...LANE_CONFIG_10K_1P,
   ...LANE_CONFIG_10K_2P,
@@ -233,7 +233,7 @@ export const LANE_CONFIG_12K: LaneConfig[] = Array.from({ length: 12 }, (_, i) =
   pressedColor: ['#ff9999', '#88ddd4', '#fff099', '#fff099', '#88ddd4', '#ff9999'][i % 6],
 }));
 
-// ── 맵 / 헬퍼 ────────────────────────────────────────────────────────────
+// ── Maps / helpers ───────────────────────────────────────────────────────
 
 export const LANE_CONFIG_MAP: Record<string, LaneConfig[]> = {
   '4K':     LANE_CONFIG_4K,
@@ -251,7 +251,7 @@ export const LANE_CONFIG_MAP: Record<string, LaneConfig[]> = {
   '48K+4SC': LANE_CONFIG_48K_SC,
 };
 
-// 1P/2P 노트 컬럼 정의
+// 1P/2P note column definitions
 export const COLUMN_1P = new Set(['SC', '1', '2', '3', '4', '5', '6', '7']);
 export const COLUMN_2P = new Set(['SC2', '8', '9', '10', '11', '12', '13', '14']);
 
@@ -275,7 +275,7 @@ export function getLaneConfigForSide(keyMode: string, side: PlaySide): LaneConfi
   return LANE_CONFIG_MAP[keyMode] ?? DEFAULT_LANE_CONFIG;
 }
 
-// 레인 위치 계산 유틸
+// Lane position calculation utility
 export function calculateLanePositions(
   config: LaneConfig[],
   scale: number = 1,

@@ -1,8 +1,8 @@
 /**
- * LaneLayer — 레인 배경 렌더링 레이어
- * S10 (REFACTOR-PLAN §9): GameCanvas.tsx Composite 패턴 분리
+ * LaneLayer — Lane background rendering layer.
+ * S10 (REFACTOR-PLAN §9): split out of GameCanvas.tsx via the Composite pattern.
  *
- * 책임: 배경 색면 · 레인 구분선 · 판정선 · 키빔
+ * Responsibilities: background fill, lane dividers, judgment line, key beams.
  */
 
 import React from 'react';
@@ -10,12 +10,12 @@ import { useFrame } from '@react-three/fiber';
 import type { KeyColumn } from '../InputHandler';
 import type { LaneConfig } from './laneConfig';
 
-// ── 상수 ─────────────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────
 
 export const JUDGMENT_LINE_Y = 100;
 const KEY_BEAM_HEIGHT = 120;
 
-// ── 정적 배경 (키 상태 무관) ─────────────────────────────────────────────
+// ── Static background (independent of key state) ─────────────────────────
 
 const StaticLanesBackground: React.FC<{
   laneConfig: LaneConfig[];
@@ -54,7 +54,7 @@ const StaticLanesBackground: React.FC<{
 ));
 StaticLanesBackground.displayName = 'StaticLanesBackground';
 
-// ── 키빔 ─────────────────────────────────────────────────────────────────
+// ── Key beams ────────────────────────────────────────────────────────────
 
 const KeyBeams: React.FC<{
   heldKeys: Set<KeyColumn>;
@@ -76,7 +76,7 @@ const KeyBeams: React.FC<{
 ));
 KeyBeams.displayName = 'KeyBeams';
 
-// ── 판정선 ───────────────────────────────────────────────────────────────
+// ── Judgment line ────────────────────────────────────────────────────────
 
 export const JudgmentLine: React.FC<{ totalWidth: number }> = React.memo(({ totalWidth }) => (
   <mesh position={[0, JUDGMENT_LINE_Y, 2]}>
@@ -86,7 +86,7 @@ export const JudgmentLine: React.FC<{ totalWidth: number }> = React.memo(({ tota
 ));
 JudgmentLine.displayName = 'JudgmentLine';
 
-// ── 통합 LaneLayer ───────────────────────────────────────────────────────
+// ── Combined LaneLayer ───────────────────────────────────────────────────
 
 export interface LaneLayerProps {
   heldKeys: Set<KeyColumn>;

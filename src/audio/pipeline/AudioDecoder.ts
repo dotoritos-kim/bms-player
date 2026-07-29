@@ -1,9 +1,9 @@
 /**
  * AudioDecoder.ts
  *
- * ArrayBuffer → AudioBuffer 디코딩 책임만 담당한다.
- * - decodeAudioData 래핑 + 에러 시 무음 버퍼 폴백
- * - abort 지원 (외부에서 aborted 플래그 주입)
+ * Solely responsible for ArrayBuffer → AudioBuffer decoding.
+ * - Wraps decodeAudioData + falls back to a silent buffer on error.
+ * - Abort support (aborted flag injected from outside).
  */
 
 import type { AudioBufferStore } from './AudioBufferStore';
@@ -21,7 +21,7 @@ export class AudioDecoder {
         return this.decodedCount;
     }
 
-    /** 무음(1초) AudioBuffer 생성 헬퍼 */
+    /** Helper that creates a silent (1 s) AudioBuffer. */
     private createSilent(): AudioBuffer {
         return this.audioContext.createBuffer(
             1,
@@ -31,14 +31,14 @@ export class AudioDecoder {
     }
 
     /**
-     * 단일 키 디코딩.
-     * 이미 스토어에 있거나 abort되면 즉시 반환.
+     * Decodes a single key.
+     * Returns immediately when already in the store or aborted.
      */
     async decodeOne(key: string, arrayBuffer: ArrayBuffer): Promise<void> {
         if (this.getAborted()) return;
         if (this.store.has(key)) return;
 
-        // detach된 ArrayBuffer 처리
+        // Handle detached ArrayBuffers.
         if (arrayBuffer.byteLength === 0) {
             this.store.set(key, this.createSilent());
             this.decodedCount++;
@@ -59,7 +59,7 @@ export class AudioDecoder {
     }
 
     /**
-     * 배치 디코딩. abort promise와 race해서 중단 지원.
+     * Batch decoding. Races against the abort promise so it can be interrupted.
      */
     async decodeAll(
         entries: Iterable<[string, ArrayBuffer]>,
@@ -96,8 +96,8 @@ export class AudioDecoder {
     }
 
     /**
-     * 점진적 디코딩 완료 대기 (waitForDecoding).
-     * storeSize: 전체 키 수, timeout ms.
+     * Waits for progressive decoding to finish (waitForDecoding).
+     * storeSize: total key count; timeout in ms.
      */
     async waitForAll(storeSize: () => number, timeout = 30_000): Promise<void> {
         const start = Date.now();

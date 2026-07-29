@@ -1,8 +1,8 @@
 /**
- * AudioSchedulerWorker - Editor/Preview용 경량 오디오 스케줄러 Worker
+ * AudioSchedulerWorker - Lightweight audio scheduler Worker for Editor/Preview.
  *
- * 판정 로직 없이 순수 오디오 스케줄링만 담당.
- * setInterval(5ms)로 tick, performance.now() 기반 타이밍.
+ * Handles pure audio scheduling only, without any judgment logic.
+ * Ticks via setInterval(5ms), timing based on performance.now().
  */
 
 // ==================== Message Types ====================

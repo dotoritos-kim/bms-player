@@ -1,8 +1,8 @@
 /**
- * WorkerAudioScheduler - Editor/Preview용 Main Thread 래퍼
+ * WorkerAudioScheduler - Main Thread wrapper for Editor/Preview.
  *
- * AudioSchedulerWorker와 통신하여 백그라운드에서도 끊김 없는 오디오 스케줄링 제공.
- * Editor playbackLoop과 useBmsPreview의 rAF 기반 스케줄러를 대체.
+ * Communicates with AudioSchedulerWorker to provide gapless audio scheduling even in the background.
+ * Replaces the rAF-based schedulers of the Editor playbackLoop and useBmsPreview.
  */
 
 import type { AudioPreloader } from '../audio/loader/AudioPreloader';
@@ -29,7 +29,7 @@ export class WorkerAudioScheduler {
   private onTick: SchedulerTickCallback | null = null;
   private onEnd: SchedulerEndCallback | null = null;
 
-  // 이번 재생 세션의 시작 위치 (catch-up 범위 제한용)
+  // Start position of the current playback session (limits the catch-up range)
   private sessionStartSec: number = 0;
 
   // rAF for UI updates (rendering only, not audio scheduling)
@@ -67,7 +67,7 @@ export class WorkerAudioScheduler {
 
   resume(resumeSec: number, speed: number): void {
     this._isPlaying = true;
-    // Catch-up: 일시정지 전에 재생 중이던 키음을 offset 적용하여 재생
+    // Catch-up: replay keysounds that were playing before the pause, with an offset applied
     this.playCatchUpNotes(resumeSec);
     this.postToWorker({
       type: 'resume',
@@ -95,8 +95,8 @@ export class WorkerAudioScheduler {
   }
 
   /**
-   * 현재 시점에 이미 재생 중이어야 하는 키음을 offset 적용하여 재생.
-   * sessionStartSec 이후에 시작된 노트만 대상 (실제 재생된 적 있는 것만).
+   * Plays keysounds that should already be playing at the current point, with an offset applied.
+   * Only targets notes that started after sessionStartSec (i.e. ones that were actually played).
    */
   private playCatchUpNotes(targetSec: number): void {
     // Binary search: find first note index at or after targetSec
@@ -109,7 +109,7 @@ export class WorkerAudioScheduler {
     // Walk backwards from lo-1 (notes before targetSec) checking if still audible
     for (let i = lo - 1; i >= 0; i--) {
       const note = this.notes[i];
-      // 이번 세션에서 재생된 적 없는 노트는 건너뜀
+      // Skip notes that were never played in this session
       if (note.sec < this.sessionStartSec) break;
 
       const duration = this.preloader.getAudioDuration(note.keysound);

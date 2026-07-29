@@ -1,8 +1,8 @@
 /**
  * WorkletPlayback.ts
  *
- * AudioWorkletNode 초기화 및 재생/정지 메시지 전담.
- * - initWorklet() : AudioWorklet 모듈 로드 + AudioWorkletNode 생성 + EffectChain 연결
+ * Dedicated to AudioWorkletNode initialization and play/stop messaging.
+ * - initWorklet(): loads the AudioWorklet module, creates the AudioWorkletNode, and wires the EffectChain.
  * - playAudio / playAudioSync / stopAudio / stopAllAudio / clear / volume / rate
  */
 
@@ -26,7 +26,7 @@ export class WorkletPlayback {
         await this.ctx.audioWorklet.addModule(url);
         this.audioWorkletNode = new AudioWorkletNode(this.ctx, 'audio-worklet-processor');
 
-        // EffectChain 에 source(worklet) 를 전달해서 노드 빌드
+        // Pass the source (worklet) to the EffectChain to build the nodes.
         this.effects.build(this.audioWorkletNode, effectSettings);
 
         this.audioWorkletNode.port.onmessage = (event) => {
@@ -41,7 +41,7 @@ export class WorkletPlayback {
         return this.audioWorkletNode !== null;
     }
 
-    // ---- 재생 (async) ----
+    // ---- Playback (async) ----
 
     async playAudio(
         key: string,
@@ -72,7 +72,7 @@ export class WorkletPlayback {
         return trackId;
     }
 
-    // ---- 재생 (동기, 기존 호환) ----
+    // ---- Playback (sync, legacy compatible) ----
 
     playAudioSync(
         key: string,
@@ -117,7 +117,7 @@ export class WorkletPlayback {
         return { trackId, leftData, rightData, transferList, isStereo };
     }
 
-    // ---- 제어 ----
+    // ---- Control ----
 
     stopAudio(trackId: string): void {
         this._post({ type: 'stop', key: trackId, data: null });
@@ -147,24 +147,24 @@ export class WorkletPlayback {
         this._post({ type: 'setPlaybackRate', key: '', data: Math.max(0.25, Math.min(4.0, rate)) });
     }
 
-    // ---- 해제 ----
+    // ---- Disposal ----
 
     dispose(): void {
         try {
             this.stopAllAudio();
             this.clearAllAudio();
         } catch {
-            // 이미 닫힌 포트 무시
+            // Ignore an already-closed port.
         }
         try {
             this.audioWorkletNode?.disconnect();
         } catch {
-            // 무시
+            // Ignore.
         }
         this.audioWorkletNode = null;
     }
 
-    // ---- 내부 ----
+    // ---- Internal ----
 
     private _post<T>(message: T, options?: StructuredSerializeOptions): void {
         if (!this.audioWorkletNode) {

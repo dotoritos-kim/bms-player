@@ -1,12 +1,12 @@
 /**
- * BMS 스코어 관리
- * EX-SCORE, 콤보, 정확도 계산
+ * BMS score management.
+ * Computes EX-SCORE, combo, and accuracy.
  */
 
 import type { Judgment } from './JudgmentEngine';
 
 export interface ScoreState {
-  // 판정 카운트
+  // Judgment counts
   pgreatCount: number;
   greatCount: number;
   goodCount: number;
@@ -14,29 +14,29 @@ export interface ScoreState {
   poorCount: number;
   missCount: number;
 
-  // 콤보
+  // Combo
   currentCombo: number;
   maxCombo: number;
 
-  // 점수
+  // Score
   exScore: number;
 
-  // 비율
+  // Rates
   totalNotes: number;
   accuracy: number;
   exScoreRate: number;
 
-  // 마지막 판정
+  // Last judgment
   lastJudgment: Judgment | null;
   lastOffset: number;
 }
 
 export interface ScoreManagerConfig {
-  totalNotes: number;  // 전체 노트 수 (클리어 비율 계산용)
+  totalNotes: number;  // Total note count (for clear rate calculation)
 }
 
 export class ScoreManager {
-  // 판정 카운트
+  // Judgment counts
   private _pgreatCount: number = 0;
   private _greatCount: number = 0;
   private _goodCount: number = 0;
@@ -44,18 +44,18 @@ export class ScoreManager {
   private _poorCount: number = 0;
   private _missCount: number = 0;
 
-  // 콤보
+  // Combo
   private _currentCombo: number = 0;
   private _maxCombo: number = 0;
 
-  // 설정
+  // Config
   private _totalNotes: number;
 
-  // 마지막 판정 정보
+  // Last judgment info
   private _lastJudgment: Judgment | null = null;
   private _lastOffset: number = 0;
 
-  // 변화 추적 (애니메이션용)
+  // Change tracking (for animations)
   private _comboChanged: boolean = false;
   private _scoreChanged: boolean = false;
 
@@ -64,7 +64,7 @@ export class ScoreManager {
   }
 
   /**
-   * 판정 기록
+   * Records a judgment.
    */
   onJudgment(judgment: Judgment, offset: number = 0): void {
     this._lastJudgment = judgment;
@@ -104,28 +104,28 @@ export class ScoreManager {
         break;
     }
 
-    // 최대 콤보 갱신
+    // Update the max combo
     if (this._currentCombo > this._maxCombo) {
       this._maxCombo = this._currentCombo;
     }
   }
 
   /**
-   * EX 스코어 (PGREAT×2 + GREAT×1)
+   * EX score (PGREAT×2 + GREAT×1).
    */
   get exScore(): number {
     return this._pgreatCount * 2 + this._greatCount;
   }
 
   /**
-   * 최대 가능 EX 스코어
+   * Maximum possible EX score.
    */
   get maxExScore(): number {
     return this._totalNotes * 2;
   }
 
   /**
-   * 처리된 노트 수
+   * Number of judged notes.
    */
   get judgedNotes(): number {
     return (
@@ -139,8 +139,8 @@ export class ScoreManager {
   }
 
   /**
-   * 정확도 (0-100)
-   * PGREAT=100%, GREAT=80%, GOOD=50%, 나머지=0%
+   * Accuracy (0-100).
+   * PGREAT=100%, GREAT=80%, GOOD=50%, others=0%
    */
   get accuracy(): number {
     const judged = this.judgedNotes;
@@ -155,7 +155,7 @@ export class ScoreManager {
   }
 
   /**
-   * EX 스코어 비율 (0-1)
+   * EX score rate (0-1).
    */
   get exScoreRate(): number {
     const maxEx = this._totalNotes * 2;
@@ -164,7 +164,7 @@ export class ScoreManager {
   }
 
   /**
-   * 현재 진행률 (0-1)
+   * Current progress (0-1).
    */
   get progress(): number {
     if (this._totalNotes === 0) return 0;
@@ -172,7 +172,7 @@ export class ScoreManager {
   }
 
   /**
-   * DJ 레벨 계산 (AAA, AA, A, ...)
+   * Computes the DJ level (AAA, AA, A, ...).
    */
   get djLevel(): string {
     const rate = this.exScoreRate;
@@ -188,21 +188,21 @@ export class ScoreManager {
   }
 
   /**
-   * 풀콤보 여부
+   * Whether it is a full combo.
    */
   get isFullCombo(): boolean {
     return this._badCount === 0 && this._poorCount === 0 && this._missCount === 0;
   }
 
   /**
-   * 퍼펙트 여부 (PGREAT만)
+   * Whether it is perfect (PGREAT only).
    */
   get isPerfect(): boolean {
     return this.isFullCombo && this._greatCount === 0 && this._goodCount === 0;
   }
 
   /**
-   * 현재 상태 반환
+   * Returns the current state.
    */
   getState(): ScoreState {
     return {
@@ -224,7 +224,7 @@ export class ScoreManager {
   }
 
   /**
-   * Getter들
+   * Getters
    */
   get pgreatCount(): number { return this._pgreatCount; }
   get greatCount(): number { return this._greatCount; }
@@ -239,7 +239,7 @@ export class ScoreManager {
   get lastOffset(): number { return this._lastOffset; }
 
   /**
-   * 콤보 변화 확인 및 리셋 (애니메이션용)
+   * Checks and resets the combo change flag (for animations).
    */
   consumeComboChange(): boolean {
     const changed = this._comboChanged;
@@ -248,7 +248,7 @@ export class ScoreManager {
   }
 
   /**
-   * 스코어 변화 확인 및 리셋 (애니메이션용)
+   * Checks and resets the score change flag (for animations).
    */
   consumeScoreChange(): boolean {
     const changed = this._scoreChanged;
@@ -257,7 +257,7 @@ export class ScoreManager {
   }
 
   /**
-   * 리셋
+   * Resets everything.
    */
   reset(): void {
     this._pgreatCount = 0;

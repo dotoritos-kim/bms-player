@@ -1,6 +1,6 @@
 /**
- * BMS 게이지 시스템
- * GROOVE, HARD, EX-HARD, EASY, ASSIST EASY 게이지 구현
+ * BMS gauge system.
+ * Implements the GROOVE, HARD, EX-HARD, EASY, and ASSIST EASY gauges.
  */
 
 import type { Judgment } from './JudgmentEngine';
@@ -8,12 +8,12 @@ import type { Judgment } from './JudgmentEngine';
 export type GaugeType = 'groove' | 'easy' | 'assist-easy' | 'hard' | 'exhard';
 
 export interface GaugeConfig {
-  startValue: number;       // 시작 게이지 (%)
-  clearTarget: number;      // 클리어 기준 (%)
-  minValue: number;         // 최소 게이지 (%)
-  failOnZero: boolean;      // 0%에서 즉시 실패 여부
-  lowHpThreshold: number;   // 저생명치 보정 기준 (%)
-  lowHpMultiplier: number;  // 저생명치 보정 배율
+  startValue: number;       // Starting gauge (%)
+  clearTarget: number;      // Clear threshold (%)
+  minValue: number;         // Minimum gauge (%)
+  failOnZero: boolean;      // Whether to fail immediately at 0%
+  lowHpThreshold: number;   // Low-HP compensation threshold (%)
+  lowHpMultiplier: number;  // Low-HP compensation multiplier
 }
 
 const GAUGE_CONFIGS: Record<GaugeType, GaugeConfig> = {
@@ -31,11 +31,11 @@ const GAUGE_CONFIGS: Record<GaugeType, GaugeConfig> = {
     minValue: 2,
     failOnZero: false,
     lowHpThreshold: 0,
-    lowHpMultiplier: 0.5,  // 감소량 절반
+    lowHpMultiplier: 0.5,  // Damage halved
   },
   'assist-easy': {
     startValue: 22,
-    clearTarget: 60,  // 낮은 클리어 기준
+    clearTarget: 60,  // Lower clear threshold
     minValue: 2,
     failOnZero: false,
     lowHpThreshold: 0,
@@ -43,10 +43,10 @@ const GAUGE_CONFIGS: Record<GaugeType, GaugeConfig> = {
   },
   'hard': {
     startValue: 100,
-    clearTarget: 0.01,  // 0% 초과
+    clearTarget: 0.01,  // Above 0%
     minValue: 0,
     failOnZero: true,
-    lowHpThreshold: 30,  // 30% 이하 보정
+    lowHpThreshold: 30,  // Compensation at 30% or below
     lowHpMultiplier: 0.5,
   },
   'exhard': {
@@ -54,7 +54,7 @@ const GAUGE_CONFIGS: Record<GaugeType, GaugeConfig> = {
     clearTarget: 0.01,
     minValue: 0,
     failOnZero: true,
-    lowHpThreshold: 0,  // 보정 없음
+    lowHpThreshold: 0,  // No compensation
     lowHpMultiplier: 1,
   },
 };
@@ -70,10 +70,10 @@ export class GaugeSystem {
   private type: GaugeType;
   private config: GaugeConfig;
   private value: number;
-  private increase: number;  // TOTAL 기반 증가량
+  private increase: number;  // TOTAL-based increase amount
   private failed: boolean = false;
 
-  // 변화 추적 (애니메이션용)
+  // Change tracking (for animations)
   private lastDelta: number = 0;
   private lastJudgment: Judgment | null = null;
 
@@ -82,20 +82,20 @@ export class GaugeSystem {
     this.config = { ...GAUGE_CONFIGS[type] };
     this.value = this.config.startValue;
 
-    // #TOTAL 기반 증가량 계산
-    // 증가량 = TOTAL / 총 노트 수
+    // Compute the #TOTAL-based increase amount
+    // increase = TOTAL / total note count
     this.increase = noteCount > 0 ? total / noteCount : 1;
   }
 
   /**
-   * 판정에 따른 게이지 업데이트
+   * Updates the gauge based on a judgment.
    */
   onJudgment(judgment: Judgment): void {
     if (this.failed) return;
 
     let delta = 0;
 
-    // 게이지 타입에 따른 기본 증감량 계산
+    // Compute the base delta according to the gauge type
     switch (this.type) {
       case 'groove':
       case 'easy':
@@ -108,42 +108,42 @@ export class GaugeSystem {
         break;
     }
 
-    // 감소 시 보정 적용
+    // Apply compensation on decrease
     if (delta < 0) {
-      // 저생명치 보정
+      // Low-HP compensation
       if (this.config.lowHpThreshold > 0 && this.value <= this.config.lowHpThreshold) {
         delta *= this.config.lowHpMultiplier;
       }
 
-      // Easy/Assist Easy 전체 감소 보정
+      // Easy/Assist Easy global decrease compensation
       if (this.type === 'easy' || this.type === 'assist-easy') {
         delta *= 0.5;
       }
 
-      // EX-Hard 2배 감소
+      // EX-Hard doubled decrease
       if (this.type === 'exhard') {
         delta *= 2;
       }
     }
 
-    // 게이지 값 업데이트
+    // Update the gauge value
     this.value = Math.max(
       this.config.minValue,
       Math.min(100, this.value + delta)
     );
 
-    // 상태 추적
+    // Track state
     this.lastDelta = delta;
     this.lastJudgment = judgment;
 
-    // 실패 체크 (0% 도달 시)
+    // Failure check (when reaching 0%)
     if (this.config.failOnZero && this.value <= 0) {
       this.failed = true;
     }
   }
 
   /**
-   * GROOVE/EASY/ASSIST-EASY 게이지 증감량
+   * GROOVE/EASY/ASSIST-EASY gauge delta.
    */
   private calculateGrooveDelta(judgment: Judgment): number {
     switch (judgment) {
@@ -164,15 +164,15 @@ export class GaugeSystem {
   }
 
   /**
-   * HARD/EX-HARD 게이지 증감량
+   * HARD/EX-HARD gauge delta.
    */
   private calculateHardDelta(judgment: Judgment): number {
     switch (judgment) {
       case 'PGREAT':
       case 'GREAT':
-        return 0.16;  // 고정 증가량
+        return 0.16;  // Fixed increase
       case 'GOOD':
-        return 0;     // 변화 없음
+        return 0;     // No change
       case 'BAD':
         return -5;
       case 'POOR':
@@ -185,8 +185,8 @@ export class GaugeSystem {
   }
 
   /**
-   * 직접 데미지 적용 (지뢰 노트용)
-   * @param damage 데미지량 (0-100%)
+   * Applies direct damage (for landmine notes).
+   * @param damage Damage amount (0-100%)
    */
   applyDamage(damage: number): void {
     if (this.failed) return;
@@ -200,7 +200,7 @@ export class GaugeSystem {
   }
 
   /**
-   * 현재 상태 반환
+   * Returns the current state.
    */
   getState(): GaugeSystemState {
     return {
@@ -212,28 +212,28 @@ export class GaugeSystem {
   }
 
   /**
-   * 현재 게이지 값 (%)
+   * Current gauge value (%).
    */
   getValue(): number {
     return this.value;
   }
 
   /**
-   * 클리어 여부
+   * Whether the gauge is cleared.
    */
   isCleared(): boolean {
     return !this.failed && this.value >= this.config.clearTarget;
   }
 
   /**
-   * 실패 여부
+   * Whether the gauge has failed.
    */
   isFailed(): boolean {
     return this.failed;
   }
 
   /**
-   * 위험 상태 여부 (깜빡임 등 UI 효과용)
+   * Whether the gauge is in the danger zone (for UI effects like blinking).
    */
   isDanger(): boolean {
     if (this.type === 'hard' || this.type === 'exhard') {
@@ -243,21 +243,21 @@ export class GaugeSystem {
   }
 
   /**
-   * 마지막 변화량 (애니메이션용)
+   * Last delta (for animations).
    */
   getLastDelta(): number {
     return this.lastDelta;
   }
 
   /**
-   * 마지막 판정 (애니메이션용)
+   * Last judgment (for animations).
    */
   getLastJudgment(): Judgment | null {
     return this.lastJudgment;
   }
 
   /**
-   * 게이지 타입 변경 (재시작 시)
+   * Changes the gauge type (on restart).
    */
   reset(type?: GaugeType): void {
     if (type) {
@@ -271,20 +271,20 @@ export class GaugeSystem {
   }
 
   /**
-   * 게이지 색상 반환
+   * Returns the gauge color.
    */
   static getColor(type: GaugeType): string {
     switch (type) {
-      case 'groove': return '#00ff00';    // 초록
-      case 'easy': return '#00ff88';      // 민트
-      case 'assist-easy': return '#88ff88'; // 연초록
-      case 'hard': return '#ff0000';      // 빨강
-      case 'exhard': return '#ff00ff';    // 마젠타
+      case 'groove': return '#00ff00';    // Green
+      case 'easy': return '#00ff88';      // Mint
+      case 'assist-easy': return '#88ff88'; // Light green
+      case 'hard': return '#ff0000';      // Red
+      case 'exhard': return '#ff00ff';    // Magenta
     }
   }
 
   /**
-   * 게이지 타입 레이블 반환
+   * Returns the gauge type label.
    */
   static getLabel(type: GaugeType): string {
     switch (type) {

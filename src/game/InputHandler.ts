@@ -1,9 +1,9 @@
 /**
- * BMS 게임용 키 입력 핸들러
- * 저지연 키 입력 처리를 위해 performance.now() 사용
+ * Key input handler for the BMS game.
+ * Uses performance.now() for low-latency key input handling.
  */
 
-// 기본 7K+SC (IIDX SP)
+// Default 7K+SC (IIDX SP)
 export type KeyColumn7K = 'SC' | '1' | '2' | '3' | '4' | '5' | '6' | '7';
 
 // 14K+2SC (IIDX DP)
@@ -12,12 +12,12 @@ export type KeyColumn14K = KeyColumn7K | 'SC2' | '8' | '9' | '10' | '11' | '12' 
 // 9K (pop'n)
 export type KeyColumn9K = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 
-// 모든 키 컬럼 타입 (확장 가능)
+// All key column types (extensible)
 export type KeyColumn = string;
 
 export interface KeyInput {
   column: KeyColumn;
-  time: number;        // performance.now() 기준 시간 (ms)
+  time: number;        // Time based on performance.now() (ms)
   type: 'down' | 'up';
 }
 
@@ -26,7 +26,7 @@ export interface InputHandlerConfig {
   enabled: boolean;
 }
 
-// 기본 키 매핑 (7K + Scratch)
+// Default key mapping (7K + Scratch)
 export const DEFAULT_KEY_MAP: Record<string, KeyColumn> = {
   'ShiftLeft': 'SC',
   'KeyZ': 'SC',
@@ -39,7 +39,7 @@ export const DEFAULT_KEY_MAP: Record<string, KeyColumn> = {
   'KeyL': '7',
 };
 
-// 대체 키 매핑
+// Alternative key mapping
 export const ALT_KEY_MAP: Record<string, KeyColumn> = {
   'ShiftLeft': 'SC',
   'KeyA': '1',
@@ -51,7 +51,7 @@ export const ALT_KEY_MAP: Record<string, KeyColumn> = {
   'KeyL': '7',
 };
 
-// 2P 키 매핑 (SC가 오른쪽에 있으므로 오른쪽 키에 매핑)
+// 2P key mapping (SC is on the right, so mapped to right-hand keys)
 export const KEY_MAP_2P: Record<string, KeyColumn> = {
   'KeyS': '1',
   'KeyD': '2',
@@ -61,7 +61,7 @@ export const KEY_MAP_2P: Record<string, KeyColumn> = {
   'KeyK': '6',
   'KeyL': '7',
   'ShiftRight': 'SC',
-  'Semicolon': 'SC',  // 세미콜론도 SC로 사용 가능
+  'Semicolon': 'SC',  // Semicolon can also be used as SC
 };
 
 export class InputHandler {
@@ -70,7 +70,7 @@ export class InputHandler {
   private heldKeys: Set<KeyColumn> = new Set();
   private enabled: boolean = true;
 
-  // 입력 콜백
+  // Input callbacks
   private onKeyDownCallback?: (input: KeyInput) => void;
   private onKeyUpCallback?: (input: KeyInput) => void;
 
@@ -82,11 +82,11 @@ export class InputHandler {
   }
 
   private setupEventListeners(): void {
-    // 키보드 이벤트 리스너 (캡처 단계에서 처리하여 최소 지연)
+    // Keyboard event listeners (handled in the capture phase for minimal latency)
     window.addEventListener('keydown', this.handleKeyDown, { capture: true });
     window.addEventListener('keyup', this.handleKeyUp, { capture: true });
 
-    // 포커스 잃을 때 모든 키 해제
+    // Release all keys when focus is lost
     window.addEventListener('blur', this.handleBlur);
   }
 
@@ -96,10 +96,10 @@ export class InputHandler {
     const column = this.keyMap.get(e.code);
     if (!column) return;
 
-    // 키 반복 무시 (이미 누르고 있는 경우)
+    // Ignore key repeat (when already held)
     if (e.repeat || this.heldKeys.has(column)) return;
 
-    // 기본 동작 방지 (Space 스크롤 등)
+    // Prevent default behavior (Space scrolling, etc.)
     e.preventDefault();
 
     const time = performance.now();
@@ -108,7 +108,7 @@ export class InputHandler {
     const input: KeyInput = { column, time, type: 'down' };
     this.pendingInputs.push(input);
 
-    // 콜백 호출
+    // Invoke the callback
     this.onKeyDownCallback?.(input);
   };
 
@@ -126,12 +126,12 @@ export class InputHandler {
     const input: KeyInput = { column, time, type: 'up' };
     this.pendingInputs.push(input);
 
-    // 콜백 호출
+    // Invoke the callback
     this.onKeyUpCallback?.(input);
   };
 
   private handleBlur = (): void => {
-    // 모든 홀드 키 해제
+    // Release all held keys
     const time = performance.now();
     for (const column of this.heldKeys) {
       const input: KeyInput = { column, time, type: 'up' };
@@ -142,7 +142,7 @@ export class InputHandler {
   };
 
   /**
-   * 대기 중인 모든 입력을 가져오고 큐를 비웁니다
+   * Returns all pending inputs and clears the queue.
    */
   consumeInputs(): KeyInput[] {
     const inputs = [...this.pendingInputs];
@@ -151,7 +151,7 @@ export class InputHandler {
   }
 
   /**
-   * 대기 중인 키다운 입력만 가져옵니다
+   * Returns only the pending key-down inputs.
    */
   consumeKeyDowns(): KeyInput[] {
     const keyDowns = this.pendingInputs.filter(i => i.type === 'down');
@@ -160,35 +160,35 @@ export class InputHandler {
   }
 
   /**
-   * 특정 컬럼이 현재 눌려있는지 확인
+   * Checks whether a specific column is currently held.
    */
   isHeld(column: KeyColumn): boolean {
     return this.heldKeys.has(column);
   }
 
   /**
-   * 현재 눌려있는 모든 컬럼 반환
+   * Returns all currently held columns.
    */
   getHeldColumns(): KeyColumn[] {
     return Array.from(this.heldKeys);
   }
 
   /**
-   * 키다운 콜백 설정
+   * Sets the key-down callback.
    */
   onKeyDown(callback: (input: KeyInput) => void): void {
     this.onKeyDownCallback = callback;
   }
 
   /**
-   * 키업 콜백 설정
+   * Sets the key-up callback.
    */
   onKeyUp(callback: (input: KeyInput) => void): void {
     this.onKeyUpCallback = callback;
   }
 
   /**
-   * 입력 활성화/비활성화
+   * Enables/disables input.
    */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
@@ -199,14 +199,14 @@ export class InputHandler {
   }
 
   /**
-   * 키 매핑 변경
+   * Changes the key mapping.
    */
   setKeyMap(keyMap: Record<string, KeyColumn>): void {
     this.keyMap = new Map(Object.entries(keyMap));
   }
 
   /**
-   * 리소스 정리
+   * Cleans up resources.
    */
   dispose(): void {
     window.removeEventListener('keydown', this.handleKeyDown, { capture: true });

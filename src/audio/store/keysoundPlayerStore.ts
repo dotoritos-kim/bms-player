@@ -1,57 +1,57 @@
 /**
  * KeysoundPlayer Instance Store
  *
- * KeysoundPlayer 인스턴스를 전역으로 관리하여 탭 전환 시에도 재사용
- * - baseUrl 기반으로 인스턴스 캐싱
- * - dispose() 호출 없이 인스턴스 유지
- * - LRU 기반 자동 정리
+ * Manages KeysoundPlayer instances globally so they are reused across tab switches.
+ * - Caches instances keyed by baseUrl.
+ * - Keeps instances alive without calling dispose().
+ * - LRU-based automatic cleanup.
  */
 
 import { create } from 'zustand';
 import type { KeysoundPlayer } from '../../types/KeysoundPlayer';
 
-const MAX_CACHED_PLAYERS = 5; // 최대 5개 플레이어 인스턴스 유지
+const MAX_CACHED_PLAYERS = 5; // Keep at most 5 player instances.
 
 interface CachedPlayer {
   player: KeysoundPlayer;
   baseUrl: string;
-  keysoundsHash: string; // 키사운드 맵의 해시 (같은 곡인지 확인)
+  keysoundsHash: string; // Hash of the keysound map (checks whether it is the same song).
   lastUsed: number;
   isReady: boolean;
 }
 
 interface KeysoundPlayerStore {
-  // 캐시된 플레이어 맵 (baseUrl -> CachedPlayer)
+  // Map of cached players (baseUrl -> CachedPlayer).
   players: Map<string, CachedPlayer>;
 
-  // 플레이어 가져오기 또는 생성 필요 여부 확인
+  // Fetches a player, or signals whether a new one needs to be created.
   getPlayer: (baseUrl: string, keysoundsHash: string) => KeysoundPlayer | null;
 
-  // 플레이어 캐시에 저장
+  // Stores a player in the cache.
   cachePlayer: (baseUrl: string, keysoundsHash: string, player: KeysoundPlayer) => void;
 
-  // 플레이어 준비 완료 표시
+  // Marks a player as ready.
   markReady: (baseUrl: string) => void;
 
-  // 특정 플레이어 제거
+  // Removes a specific player.
   removePlayer: (baseUrl: string) => void;
 
-  // 모든 플레이어 정리
+  // Cleans up all players.
   clearAll: () => void;
 
-  // 오래된 플레이어 정리 (LRU)
+  // Cleans up stale players (LRU).
   cleanupOldPlayers: () => void;
 }
 
 /**
- * 키사운드 맵을 해시 문자열로 변환
- * 같은 키사운드 구성인지 빠르게 비교하기 위함
+ * Converts a keysound map into a hash string,
+ * used to quickly compare whether two keysound sets are identical.
  */
 export function hashKeysounds(keysounds: Record<string, string>): string {
   const keys = Object.keys(keysounds).sort();
   if (keys.length === 0) return 'empty';
 
-  // 첫 5개 + 마지막 5개 + 총 개수로 간단한 해시 생성
+  // Build a simple hash from the first 5 + last 5 keys + total count.
   const sample = [
     ...keys.slice(0, 5),
     ...keys.slice(-5),
@@ -69,30 +69,30 @@ export const useKeysoundPlayerStore = create<KeysoundPlayerStore>((set, get) => 
     const cached = players.get(baseUrl);
 
     if (cached && cached.keysoundsHash === keysoundsHash) {
-      // LRU: 최근 사용 시간 업데이트
+      // LRU: refresh the last-used time.
       cached.lastUsed = Date.now();
-      // isReady 여부와 관계없이 플레이어 반환 (호출자가 isReady 체크 가능)
+      // Return the player regardless of isReady (callers can check isReady themselves).
       return cached.player;
     }
 
-    // 캐시 미스 또는 키사운드 구성이 다름
+    // Cache miss, or the keysound set differs.
     return null;
   },
 
   cachePlayer: (baseUrl: string, keysoundsHash: string, player: KeysoundPlayer) => {
     const { players, cleanupOldPlayers } = get();
 
-    // 기존 플레이어가 있으면 dispose
+    // Dispose the existing player, if any.
     const existing = players.get(baseUrl);
     if (existing && existing.player !== player) {
       try {
         existing.player.dispose();
       } catch {
-        // dispose 에러 무시
+        // Ignore dispose errors.
       }
     }
 
-    // 새 플레이어 캐시
+    // Cache the new player.
     const newPlayers = new Map(players);
     newPlayers.set(baseUrl, {
       player,
@@ -104,7 +104,7 @@ export const useKeysoundPlayerStore = create<KeysoundPlayerStore>((set, get) => 
 
     set({ players: newPlayers });
 
-    // 캐시 크기 초과 시 정리
+    // Clean up when the cache size is exceeded.
     if (newPlayers.size > MAX_CACHED_PLAYERS) {
       cleanupOldPlayers();
     }
@@ -128,7 +128,7 @@ export const useKeysoundPlayerStore = create<KeysoundPlayerStore>((set, get) => 
       try {
         cached.player.dispose();
       } catch {
-        // dispose 에러 무시
+        // Ignore dispose errors.
       }
 
       const newPlayers = new Map(players);
@@ -140,12 +140,12 @@ export const useKeysoundPlayerStore = create<KeysoundPlayerStore>((set, get) => 
   clearAll: () => {
     const { players } = get();
 
-    // 모든 플레이어 dispose
+    // Dispose every player.
     for (const cached of players.values()) {
       try {
         cached.player.dispose();
       } catch {
-        // dispose 에러 무시
+        // Ignore dispose errors.
       }
     }
 
@@ -157,7 +157,7 @@ export const useKeysoundPlayerStore = create<KeysoundPlayerStore>((set, get) => 
 
     if (players.size <= MAX_CACHED_PLAYERS) return;
 
-    // 가장 오래된 플레이어들 정리
+    // Clean up the oldest players.
     const sortedEntries = Array.from(players.entries())
       .sort((a, b) => a[1].lastUsed - b[1].lastUsed);
 
@@ -168,7 +168,7 @@ export const useKeysoundPlayerStore = create<KeysoundPlayerStore>((set, get) => 
       try {
         cached.player.dispose();
       } catch {
-        // dispose 에러 무시
+        // Ignore dispose errors.
       }
       newPlayers.delete(key);
     }
@@ -179,7 +179,7 @@ export const useKeysoundPlayerStore = create<KeysoundPlayerStore>((set, get) => 
 }));
 
 /**
- * 페이지 언로드 시 모든 플레이어 정리
+ * Cleans up all players when the page unloads.
  */
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {

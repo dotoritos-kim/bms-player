@@ -1,12 +1,12 @@
 /**
  * EffectChain.ts
  *
- * Web Audio API 이펙트 노드(EQ/Compressor/Reverb/Stereo) 생성·연결·제어 전담.
+ * Dedicated to creating, wiring, and controlling Web Audio API effect nodes (EQ/Compressor/Reverb/Stereo).
  *
- * 레이아웃:
+ * Layout:
  *   source → [EQ*10] → Compressor → [ReverbDry+ReverbWet→Mixer] → StereoPanner → MasterGain → destination
  *
- * 간소화 모드(simplified=true)는 MasterGain → destination 만 연결한다.
+ * Simplified mode (simplified=true) connects only MasterGain → destination.
  */
 
 export const EQ_FREQUENCIES = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const;
@@ -25,7 +25,7 @@ export const EQ_PRESETS: Record<string, number[]> = {
 export interface EffectSettings {
     equalizer?: {
         enabled: boolean;
-        bands: number[]; // 10개 밴드 게인 (-12 ~ +12 dB)
+        bands: number[]; // Gains for the 10 bands (-12 to +12 dB).
     };
     compressor?: {
         enabled: boolean;
@@ -76,7 +76,7 @@ export class EffectChain {
     ) {}
 
     /**
-     * 노드 생성 + source 에 연결 (initAudioWorklet 시점에 호출).
+     * Creates the nodes and connects them to the source (called at initAudioWorklet time).
      */
     build(source: AudioNode, initialSettings?: EffectSettings): void {
         if (this.simplified) {
@@ -97,7 +97,7 @@ export class EffectChain {
     private buildFull(source: AudioNode): void {
         const ctx = this.ctx;
 
-        // 1. EQ (10밴드)
+        // 1. EQ (10 bands).
         this.equalizerNodes = EQ_FREQUENCIES.map((freq, idx) => {
             const f = ctx.createBiquadFilter();
             if (idx === 0) f.type = 'lowshelf';
@@ -132,14 +132,14 @@ export class EffectChain {
         this.masterGainNode = ctx.createGain();
         this.masterGainNode.gain.value = 1;
 
-        // --- 연결 ---
+        // --- Wiring ---
         source.disconnect();
         let cur: AudioNode = source;
 
         for (const eq of this.equalizerNodes) { cur.connect(eq); cur = eq; }
         cur.connect(this.compressorNode); cur = this.compressorNode;
 
-        // Reverb dry/wet 분기
+        // Reverb dry/wet split.
         cur.connect(this.reverbDryGain);
         this.reverbDryGain.connect(this.reverbMixerNode);
         cur.connect(this.reverbConvolverNode);
@@ -177,7 +177,7 @@ export class EffectChain {
         }
     }
 
-    // ---- 일괄 적용 ----
+    // ---- Bulk apply ----
 
     apply(settings: EffectSettings): void {
         if (settings.equalizer) {
@@ -280,7 +280,7 @@ export class EffectChain {
         return this._stereoEnabled;
     }
 
-    // ---- 해제 ----
+    // ---- Disposal ----
 
     dispose(): void {
         try {
@@ -294,7 +294,7 @@ export class EffectChain {
             this.stereoEnhancerNode?.disconnect(); this.stereoEnhancerNode = null;
             this.masterGainNode?.disconnect(); this.masterGainNode = null;
         } catch {
-            // 이미 닫힌 컨텍스트 무시
+            // Ignore an already-closed context.
         }
     }
 }

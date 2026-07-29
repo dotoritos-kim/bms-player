@@ -1,8 +1,8 @@
 /**
- * NoteLayer — 노트 렌더링 레이어 (일반 노트 · 롱노트 · 지뢰)
- * S10 (REFACTOR-PLAN §9): GameCanvas.tsx Composite 패턴 분리
+ * NoteLayer — Note rendering layer (regular notes, long notes, landmines).
+ * S10 (REFACTOR-PLAN §9): split out of GameCanvas.tsx via the Composite pattern.
  *
- * 책임: InstancedMesh 기반 노트 렌더링 (useFrame 최적화)
+ * Responsibilities: InstancedMesh-based note rendering (useFrame optimized).
  */
 
 import React, { useRef, useEffect, useMemo } from 'react';
@@ -14,7 +14,7 @@ import type { KeyColumn } from '../InputHandler';
 import { JUDGMENT_LINE_Y } from './LaneLayer';
 import type { LaneConfig } from './laneConfig';
 
-// ── 상수 ─────────────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────
 
 const NOTE_HEIGHT = 8;
 const VISIBLE_BEATS = 8;
@@ -24,11 +24,11 @@ const MAX_VISIBLE_LONG_NOTES = 100;
 const LANDMINE_COLOR = 0xff0033;
 const DEFAULT_COLOR = 0xffffff;
 
-// 재사용 가능한 Three.js 객체 (GC 압력 감소)
+// Reusable Three.js objects (reduces GC pressure)
 const _dummy = new THREE.Object3D();
 const _color = new THREE.Color();
 
-// ── 일반 노트 ─────────────────────────────────────────────────────────────
+// ── Regular notes ────────────────────────────────────────────────────────
 
 export const NotesRenderer: React.FC<{
   notes: GameNote[];
@@ -91,7 +91,7 @@ export const NotesRenderer: React.FC<{
 });
 NotesRenderer.displayName = 'NotesRenderer';
 
-// ── 지뢰 노트 ─────────────────────────────────────────────────────────────
+// ── Landmine notes ───────────────────────────────────────────────────────
 
 export const LandmineRenderer: React.FC<{
   landmines: GameNote[];
@@ -148,7 +148,7 @@ export const LandmineRenderer: React.FC<{
 });
 LandmineRenderer.displayName = 'LandmineRenderer';
 
-// ── 롱노트 ───────────────────────────────────────────────────────────────
+// ── Long notes ───────────────────────────────────────────────────────────
 
 export const LongNotesRenderer: React.FC<{
   notes: GameNote[];
@@ -207,7 +207,7 @@ export const LongNotesRenderer: React.FC<{
       const colorHex = colorMapHex.get(column) ?? DEFAULT_COLOR;
       _color.setHex(colorHex);
 
-      // 헤드 (진행 중인 롱노트면 스킵)
+      // Head (skipped while the long note is being held)
       if (!isActiveHold) {
         _dummy.position.set(lanePos.x, startY, 1);
         _dummy.scale.set(lanePos.width - 4, NOTE_HEIGHT * noteScale, 1);
@@ -217,7 +217,7 @@ export const LongNotesRenderer: React.FC<{
         headTailCount++;
       }
 
-      // 테일
+      // Tail
       _dummy.position.set(lanePos.x, endY, 1);
       _dummy.scale.set(lanePos.width - 4, NOTE_HEIGHT * noteScale, 1);
       _dummy.updateMatrix();
@@ -225,7 +225,7 @@ export const LongNotesRenderer: React.FC<{
       headTailMesh.setColorAt(headTailCount, _color);
       headTailCount++;
 
-      // 바디
+      // Body
       const centerY = startY + height / 2;
       _dummy.position.set(lanePos.x, centerY, 0.5);
       _dummy.scale.set(lanePos.width - 8, height, 1);

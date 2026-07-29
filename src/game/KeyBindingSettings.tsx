@@ -1,6 +1,6 @@
 /**
- * 키 바인딩 설정 컴포넌트
- * 사용자가 게임 키를 커스터마이징할 수 있는 UI 제공
+ * Key binding settings component.
+ * Provides a UI that lets users customize their game keys.
  *
  * NOTE: This version uses plain HTML elements instead of shadcn/ui components
  * to avoid dependency on the host app's UI library.
@@ -9,11 +9,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { DEFAULT_KEY_MAP, type KeyColumn } from './InputHandler';
 
-// ============ 상수 ============
+// ============ Constants ============
 
 const STORAGE_KEY = 'bms_key_bindings';
 
-// 레인별 표시 정보
+// Display info per lane
 interface LaneInfo {
   column: KeyColumn;
   label: string;
@@ -49,7 +49,7 @@ function getLaneInfoForKeyMode(keyMode?: number): LaneInfo[] {
   }
 }
 
-// 키 코드를 사용자 친화적인 이름으로 변환
+// Converts a key code to a user-friendly name
 function getKeyDisplayName(code: string): string {
   const keyNames: Record<string, string> = {
     'ShiftLeft': 'L-Shift',
@@ -87,30 +87,30 @@ function getKeyDisplayName(code: string): string {
   return code;
 }
 
-// ============ 타입 ============
+// ============ Types ============
 
 export interface KeyBindings {
   [column: string]: string; // column -> keyCode
 }
 
 export interface KeyBindingSettingsProps {
-  /** 현재 키 바인딩 */
+  /** Current key bindings */
   bindings?: KeyBindings;
-  /** 변경 콜백 */
+  /** Change callback */
   onChange?: (bindings: KeyBindings) => void;
-  /** 트리거 버튼 숨기기 (외부에서 open 제어 시) */
+  /** Hide the trigger button (when open is controlled externally) */
   hideTrigger?: boolean;
-  /** 다이얼로그 열림 상태 (외부 제어) */
+  /** Dialog open state (externally controlled) */
   open?: boolean;
-  /** 다이얼로그 열림 상태 변경 */
+  /** Dialog open state change */
   onOpenChange?: (open: boolean) => void;
-  /** 키 모드 (5K, 7K 등). 미지정 시 7K */
+  /** Key mode (5K, 7K, etc.). Defaults to 7K when unspecified */
   keyMode?: number;
 }
 
-// ============ 유틸 함수 ============
+// ============ Utility functions ============
 
-/** 저장된 키 바인딩 불러오기 */
+/** Loads saved key bindings */
 export function loadKeyBindings(): KeyBindings {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -118,22 +118,22 @@ export function loadKeyBindings(): KeyBindings {
       return JSON.parse(saved);
     }
   } catch {
-    // 무시
+    // Ignore
   }
-  // 기본값 반환 (keyCode -> column 을 column -> keyCode로 변환)
+  // Return defaults (converts keyCode -> column into column -> keyCode)
   return invertKeyMap(DEFAULT_KEY_MAP);
 }
 
-/** 키 바인딩 저장 */
+/** Saves key bindings */
 export function saveKeyBindings(bindings: KeyBindings): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(bindings));
   } catch {
-    // 무시
+    // Ignore
   }
 }
 
-/** 키 바인딩을 InputHandler용 keyMap으로 변환 */
+/** Converts key bindings into a keyMap for InputHandler */
 export function bindingsToKeyMap(bindings: KeyBindings): Record<string, KeyColumn> {
   const keyMap: Record<string, KeyColumn> = {};
   for (const [column, keyCode] of Object.entries(bindings)) {
@@ -142,11 +142,11 @@ export function bindingsToKeyMap(bindings: KeyBindings): Record<string, KeyColum
   return keyMap;
 }
 
-/** DEFAULT_KEY_MAP을 bindings 형식으로 변환 */
+/** Converts DEFAULT_KEY_MAP into the bindings format */
 function invertKeyMap(keyMap: Record<string, KeyColumn>): KeyBindings {
   const bindings: KeyBindings = {};
   for (const [keyCode, column] of Object.entries(keyMap)) {
-    // 같은 column에 여러 키가 매핑된 경우 첫 번째만 사용
+    // When multiple keys map to the same column, use only the first one
     if (!bindings[column]) {
       bindings[column] = keyCode;
     }
@@ -154,9 +154,9 @@ function invertKeyMap(keyMap: Record<string, KeyColumn>): KeyBindings {
   return bindings;
 }
 
-// ============ 컴포넌트 ============
+// ============ Components ============
 
-/** 개별 키 슬롯 */
+/** Individual key slot */
 const KeySlot: React.FC<{
   lane: LaneInfo;
   currentKey: string;
@@ -177,7 +177,7 @@ const KeySlot: React.FC<{
         transition: 'all 0.2s',
       }}
     >
-      {/* 레인 표시 */}
+      {/* Lane indicator */}
       <div
         style={{
           width: 40,
@@ -195,13 +195,13 @@ const KeySlot: React.FC<{
         {lane.label}
       </div>
 
-      {/* 설명 */}
+      {/* Description */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 500, fontSize: 14, color: '#fff' }}>{lane.description}</div>
         <div style={{ fontSize: 12, color: '#888' }}>Lane {lane.label}</div>
       </div>
 
-      {/* 현재 키 / 리스닝 상태 */}
+      {/* Current key / listening state */}
       <button
         onClick={isListening ? onCancelListening : onStartListening}
         style={{
@@ -227,7 +227,7 @@ const KeySlot: React.FC<{
   );
 };
 
-/** 키 바인딩 설정 다이얼로그 */
+/** Key binding settings dialog */
 export const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({
   bindings: externalBindings,
   onChange,
@@ -236,24 +236,24 @@ export const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({
   onOpenChange: externalOnOpenChange,
   keyMode,
 }) => {
-  // 내부 상태 (외부 제어가 없을 때 사용)
+  // Internal state (used when there is no external control)
   const [internalOpen, setInternalOpen] = useState(false);
   const open = externalOpen ?? internalOpen;
   const setOpen = externalOnOpenChange ?? setInternalOpen;
 
-  // 키 바인딩 상태
+  // Key binding state
   const [bindings, setBindings] = useState<KeyBindings>(() => externalBindings ?? loadKeyBindings());
   const [listeningColumn, setListeningColumn] = useState<KeyColumn | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // 외부 bindings 변경 시 동기화
+  // Sync when external bindings change
   useEffect(() => {
     if (externalBindings) {
       setBindings(externalBindings);
     }
   }, [externalBindings]);
 
-  // 키 입력 리스너
+  // Key input listener
   useEffect(() => {
     if (!listeningColumn) return;
 
@@ -261,20 +261,20 @@ export const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({
       e.preventDefault();
       e.stopPropagation();
 
-      // ESC는 취소
+      // ESC cancels
       if (e.code === 'Escape') {
         setListeningColumn(null);
         return;
       }
 
-      // 키 바인딩 업데이트
+      // Update the key binding
       setBindings((prev) => {
-        // 이미 다른 레인에 할당된 키인지 확인
+        // Check whether the key is already assigned to another lane
         const existingColumn = Object.entries(prev).find(([, code]) => code === e.code)?.[0];
 
         const newBindings = { ...prev };
 
-        // 기존에 이 키가 할당된 레인이 있으면 현재 레인의 키와 교환
+        // If another lane already has this key, swap it with the current lane's key
         if (existingColumn && existingColumn !== listeningColumn) {
           newBindings[existingColumn] = prev[listeningColumn];
         }
@@ -291,7 +291,7 @@ export const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [listeningColumn]);
 
-  // 저장
+  // Save
   const handleSave = useCallback(() => {
     saveKeyBindings(bindings);
     onChange?.(bindings);
@@ -299,14 +299,14 @@ export const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({
     setOpen(false);
   }, [bindings, onChange, setOpen]);
 
-  // 기본값으로 초기화
+  // Reset to defaults
   const handleReset = useCallback(() => {
     const defaultBindings = invertKeyMap(DEFAULT_KEY_MAP);
     setBindings(defaultBindings);
     setHasChanges(true);
   }, []);
 
-  // 취소
+  // Cancel
   const handleCancel = useCallback(() => {
     setBindings(externalBindings ?? loadKeyBindings());
     setHasChanges(false);
@@ -368,7 +368,7 @@ export const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({
           flexDirection: 'column',
         }}
       >
-        {/* 헤더 */}
+        {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #333' }}>
           <div style={{ fontSize: 18, fontWeight: 'bold', color: '#fff' }}>Key Binding Settings</div>
           <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>
@@ -376,7 +376,7 @@ export const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({
           </div>
         </div>
 
-        {/* 키 슬롯 목록 */}
+        {/* Key slot list */}
         <div style={{ padding: '12px 16px', overflowY: 'auto', maxHeight: 400, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {getLaneInfoForKeyMode(keyMode).map((lane) => (
             <KeySlot
@@ -390,7 +390,7 @@ export const KeyBindingSettings: React.FC<KeyBindingSettingsProps> = ({
           ))}
         </div>
 
-        {/* 푸터 */}
+        {/* Footer */}
         <div style={{ padding: '12px 16px', borderTop: '1px solid #333', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button
             onClick={handleReset}

@@ -14,12 +14,12 @@ import { GameEngine } from '../src/game/GameEngine';
 import type { INotechart, GameNote, SoundedEvent } from '../src/audio/judgements';
 
 /**
- * Stage 3 — GamePhase 상태 머신 검증.
+ * Stage 3 — GamePhase state machine verification.
  *
- * 검증 범위:
- * 1. 4-boolean derive (legacy 호환성)
- * 2. 허용 전이/금지 전이
- * 3. GameEngine이 phase를 올바르게 갱신하고, 잘못된 호출은 무시(no-op)
+ * Coverage:
+ * 1. 4-boolean derivation (legacy compatibility)
+ * 2. Allowed/forbidden transitions
+ * 3. GameEngine updates phase correctly and ignores invalid calls (no-op)
  */
 
 describe('GamePhase — derived flags (legacy compatibility)', () => {

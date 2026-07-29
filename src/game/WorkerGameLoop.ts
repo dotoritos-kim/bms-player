@@ -1,9 +1,9 @@
 /**
- * WorkerGameLoop - Main Thread 측 Worker 래퍼
+ * WorkerGameLoop - Main Thread side Worker wrapper.
  *
- * GameLoop과 동일한 API를 제공하되, 게임 로직은 Worker에서 실행.
- * 키 입력 → keysound는 nextNotes 캐시로 즉시 재생 (0ms 추가 레이턴시).
- * Worker로부터 판정/상태 업데이트를 받아 콜백으로 전달.
+ * Provides the same API as GameLoop, but game logic runs in the Worker.
+ * Key input → keysound plays immediately via the nextNotes cache (0ms added latency).
+ * Receives judgment/state updates from the Worker and forwards them via callbacks.
  */
 
 import type { Notechart } from '../audio/judgements';
@@ -56,7 +56,7 @@ export class WorkerGameLoop {
   private playbackRate: number;
   private startOffset: number;
 
-  // State (Stage 3 — discriminated union; legacy 4-boolean은 derived getter)
+  // State (Stage 3 — discriminated union; the legacy 4 booleans are derived getters)
   private _phase: GamePhase = PHASE_READY;
   private _lastState: GameLoopState | null = null;
 
@@ -219,17 +219,17 @@ export class WorkerGameLoop {
     return this._lastState;
   }
 
-  /** Stage 3 — discriminated union 우선 노출. */
+  /** Stage 3 — exposes the discriminated union as the primary API. */
   get phase(): GamePhase { return this._phase; }
-  /** @deprecated `phase.kind === 'playing' || phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'playing' || phase.kind === 'paused'`. */
   get isPlaying(): boolean {
     return this._phase.kind === 'playing' || this._phase.kind === 'paused';
   }
-  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'paused'`. */
   get isPaused(): boolean { return this._phase.kind === 'paused'; }
-  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'completed'`. */
   get isCompleted(): boolean { return this._phase.kind === 'completed'; }
-  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'failed'`. */
   get isFailed(): boolean { return this._phase.kind === 'failed'; }
 
   // ==================== Key Input (Main Thread) ====================

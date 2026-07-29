@@ -1,11 +1,11 @@
 /**
  * AudioFetchPipeline.ts
  *
- * Worker 통신 + IndexedDB 캐시 체크로 ArrayBuffer 를 수집하는 파이프라인.
- * - IndexedDB에서 먼저 히트 조회
- * - 미스된 키는 Worker(LOAD_AUDIO)로 fetch
- * - 수집된 ArrayBuffer를 audioDataMap 에 저장
- * - 콜백(`onWorkerMessage`, `onLoaded`)으로 상위(AudioPreloader) 에 알림
+ * Pipeline that collects ArrayBuffers via worker communication + IndexedDB cache checks.
+ * - Looks up hits in IndexedDB first.
+ * - Missed keys are fetched through the worker (LOAD_AUDIO).
+ * - Collected ArrayBuffers are stored in audioDataMap.
+ * - Notifies the layer above (AudioPreloader) through callbacks (`onWorkerMessage`, `onLoaded`).
  */
 
 import type { LoaderOutbound, FileMap } from '../loader/messages';
@@ -30,9 +30,9 @@ export class AudioFetchPipeline {
         private readonly fileMap: FileMap,
         private readonly worker: Worker,
         private readonly useIndexedDBCache: boolean,
-        /** 점진적 디코딩을 위한 콜백 */
+        /** Callback used for progressive decoding. */
         private readonly onLoaded: (key: string, buf: ArrayBuffer) => void,
-        /** 외부 onWorkerMessage 콜백 (KeysoundPlayer 등) */
+        /** External onWorkerMessage callback (KeysoundPlayer etc.). */
         private readonly onWorkerMessage?: (type: string, payload: unknown) => void,
     ) {
         this.worker.onmessage = (e: MessageEvent<LoaderOutbound>) => {

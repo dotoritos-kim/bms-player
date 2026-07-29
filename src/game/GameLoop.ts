@@ -1,14 +1,14 @@
 /**
- * BMS 게임 루프 — rAF 기반 Main Thread 실행 환경
+ * BMS game loop — rAF-based Main Thread execution environment.
  *
- * 동기화 전략:
- * 1. AudioContext.currentTime을 마스터 클럭으로 사용
- * 2. 게임 시작 시 contextStartTime 기록
- * 3. 모든 게임 시간 = (AudioContext.currentTime - contextStartTime) * 1000
- * 4. requestAnimationFrame으로 렌더링, 입력은 이벤트 기반
+ * Synchronization strategy:
+ * 1. Use AudioContext.currentTime as the master clock.
+ * 2. Record contextStartTime when the game starts.
+ * 3. All game time = (AudioContext.currentTime - contextStartTime) * 1000.
+ * 4. Render via requestAnimationFrame; input is event driven.
  *
- * S7 (REFACTOR-PLAN): GameEngine에 게임 로직 위임(H2 중복 제거).
- * GameLoop는 이제 타이밍·입력·rAF 스케줄링·사이드 이펙트 실행에만 집중.
+ * S7 (REFACTOR-PLAN): game logic delegated to GameEngine (H2 dedup).
+ * GameLoop now focuses solely on timing, input, rAF scheduling, and side-effect execution.
  */
 
 import type { Notechart } from '../audio/judgements';
@@ -31,79 +31,80 @@ import { GameEngine, type GameEngineConfig } from './GameEngine';
 // ── Re-export types so callers don't break ─────────────────────────────────
 
 export interface GameLoopConfig {
-  /** 노트 차트 */
+  /** Notechart */
   notechart: Notechart;
-  /** 키사운드 플레이어 */
+  /** Keysound player */
   keysoundPlayer: KeysoundPlayer;
-  /** 오디오 컨텍스트 (동기화용) */
+  /** Audio context (for synchronization) */
   audioContext: AudioContext;
-  /** 게이지 타입 */
+  /** Gauge type */
   gaugeType?: GaugeType;
-  /** TOTAL 값 (#TOTAL) */
+  /** TOTAL value (#TOTAL) */
   total?: number;
-  /** 판정 RANK (#RANK) */
+  /** Judgment RANK (#RANK) */
   rank?: number;
-  /** 커스텀 판정 (#DEFEXRANK) */
+  /** Custom judgment (#DEFEXRANK) */
   defexrank?: number;
-  /** 입력 핸들러 (외부에서 주입 가능) */
+  /** Input handler (can be injected externally) */
   inputHandler?: InputHandler;
-  /** 시작 오프셋 (ms) */
+  /** Start offset (ms) */
   startOffset?: number;
-  /** 배속 */
+  /** Playback rate */
   playbackRate?: number;
-  /** 오디오 레이턴시 보정 (ms) - 양수: 오디오가 늦게 들림, 오디오를 일찍 재생 */
+  /** Audio latency compensation (ms) - positive: audio is heard late, so play audio earlier */
   audioLatency?: number;
-  /** 판정 레이턴시 보정 (ms) - 양수: 판정을 늦게 처리 */
+  /** Judgment latency compensation (ms) - positive: process judgments later */
   judgmentOffset?: number;
-  /** 비주얼 레이턴시 보정 (ms) - 양수: 노트를 일찍 표시 */
+  /** Visual latency compensation (ms) - positive: display notes earlier */
   visualOffset?: number;
-  /** 오토플레이 모드 */
+  /** Autoplay mode */
   autoplay?: boolean;
 }
 
 export interface GameLoopState {
   /**
-   * 통합 게임 상태(Stage 3, REFACTOR-PLAN §6.2). 신규 컨슈머는 이 필드를
-   * 우선 사용한다. 기존 4-boolean(`isPlaying`/`isPaused`/`isFailed`/`isCompleted`)
-   * 도 호환을 위해 유지되며, `phase`로부터 derive된다(`gamePhaseToFlags`).
+   * Unified game state (Stage 3, REFACTOR-PLAN §6.2). New consumers should
+   * prefer this field. The legacy 4 booleans (`isPlaying`/`isPaused`/`isFailed`/
+   * `isCompleted`) are kept for compatibility and derived from `phase`
+   * (`gamePhaseToFlags`).
    */
   phase: GamePhase;
-  /** @deprecated `phase.kind` 사용 권장. `phase`에서 derive (`playing`/`paused`). */
+  /** @deprecated Prefer `phase.kind`. Derived from `phase` (`playing`/`paused`). */
   isPlaying: boolean;
-  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'paused'`. */
   isPaused: boolean;
-  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'failed'`. */
   isFailed: boolean;
-  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'completed'`. */
   isCompleted: boolean;
-  /** 현재 게임 시간 (ms) */
+  /** Current game time (ms) */
   currentTime: number;
-  /** 렌더링용 시간 (비주얼 오프셋 적용, ms) */
+  /** Rendering time (visual offset applied, ms) */
   visualTime: number;
-  /** 현재 비트 */
+  /** Current beat */
   currentBeat: number;
-  /** 현재 콤보 */
+  /** Current combo */
   combo: number;
-  /** 게이지 값 (%) */
+  /** Gauge value (%) */
   gaugeValue: number;
-  /** EX 스코어 */
+  /** EX score */
   exScore: number;
-  /** 마지막 판정 */
+  /** Last judgment */
   lastJudgment: Judgment | null;
-  /** 마지막 판정 오프셋 (ms) */
+  /** Last judgment offset (ms) */
   lastOffset: number;
-  /** 진행 중인 롱노트 ID 목록 */
+  /** IDs of long notes currently being held */
   activeHoldNoteIds: Set<number>;
-  /** 판정 카운트 */
+  /** Judgment counts */
   pgreatCount: number;
   greatCount: number;
   goodCount: number;
   badCount: number;
   poorCount: number;
   missCount: number;
-  /** 최대 콤보 */
+  /** Max combo */
   maxCombo: number;
-  /** 최근 타이밍 오프셋 기록 (Early/Late 표시용) */
+  /** Recent timing offset history (for the Early/Late display) */
   recentOffsets: number[];
 }
 
@@ -123,24 +124,24 @@ export interface LandmineEvent {
 }
 
 export interface GameLoopCallbacks {
-  /** 상태 업데이트 (매 프레임) */
+  /** State update (every frame) */
   onUpdate?: (state: GameLoopState) => void;
-  /** 판정 발생 시 */
+  /** When a judgment occurs */
   onJudgment?: (event: JudgmentEvent) => void;
-  /** 지뢰 노트 트리거 시 */
+  /** When a landmine note is triggered */
   onLandmineTrigger?: (event: LandmineEvent) => void;
-  /** 게임 완료 시 */
+  /** When the game completes */
   onComplete?: (score: ScoreState) => void;
-  /** 게임 실패 시 */
+  /** When the game fails */
   onFailed?: (score: ScoreState) => void;
-  /** 키 입력 시 */
+  /** On key input */
   onKeyInput?: (column: KeyColumn, held: boolean) => void;
 }
 
 // ── GameLoop ────────────────────────────────────────────────────────────────
 
 export class GameLoop {
-  // S7: 모든 게임 로직은 GameEngine에 위임
+  // S7: all game logic is delegated to GameEngine
   private readonly engine: GameEngine;
 
   private readonly keysoundPlayer: KeysoundPlayer;
@@ -148,13 +149,13 @@ export class GameLoop {
   private readonly inputHandler: InputHandler;
   private readonly callbacks: GameLoopCallbacks;
 
-  // 타이밍 (GameLoop 전용: AudioContext 기반 클럭)
+  // Timing (GameLoop specific: AudioContext-based clock)
   private contextStartTime: number = 0;
   private readonly startOffset: number;
   private readonly playbackRate: number;
   private pauseTime: number = 0;
 
-  // 상태 (phase는 engine을 통해 읽되, GameLoop 자체도 phase 캐시 유지)
+  // State (phase is read via the engine, but GameLoop keeps its own phase cache too)
   private _phase: GamePhase = PHASE_READY;
   private animationFrameId: number = 0;
   private firstTickDone: boolean = false;
@@ -173,12 +174,12 @@ export class GameLoop {
     this.startOffset = config.startOffset ?? 0;
     this.playbackRate = Math.max(0.1, Math.min(4, config.playbackRate ?? 1));
 
-    // 입력 핸들러
+    // Input handler
     this.inputHandler = config.inputHandler ?? new InputHandler();
     this.inputHandler.onKeyDown(this.handleKeyDown);
     this.inputHandler.onKeyUp(this.handleKeyUp);
 
-    // S7: 게임 로직 전량을 GameEngine에 위임
+    // S7: delegate all game logic to GameEngine
     const engineConfig: GameEngineConfig = {
       notechart: config.notechart,
       gaugeType: config.gaugeType,
@@ -241,7 +242,7 @@ export class GameLoop {
     this._phase = PHASE_PLAYING;
     this.engine.resume();
 
-    // 일시정지된 시간만큼 시작 시간 조정
+    // Adjust the start time by the paused duration
     const pauseDuration = (this.audioContext.currentTime * 1000) -
       (this.contextStartTime * 1000 + this.pauseTime);
     this.contextStartTime += pauseDuration / 1000;
@@ -259,19 +260,19 @@ export class GameLoop {
     this.clearAutoplayTimers();
   }
 
-  // ── Phase / derived getters (external API 호환) ───────────────────────────
+  // ── Phase / derived getters (external API compatibility) ─────────────────
 
   get phase(): GamePhase { return this._phase; }
 
-  /** @deprecated `phase.kind === 'playing' || phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'playing' || phase.kind === 'paused'`. */
   get isPlaying(): boolean {
     return this._phase.kind === 'playing' || this._phase.kind === 'paused';
   }
-  /** @deprecated `phase.kind === 'paused'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'paused'`. */
   get isPaused(): boolean { return this._phase.kind === 'paused'; }
-  /** @deprecated `phase.kind === 'completed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'completed'`. */
   get isCompleted(): boolean { return this._phase.kind === 'completed'; }
-  /** @deprecated `phase.kind === 'failed'` 사용 권장. */
+  /** @deprecated Prefer `phase.kind === 'failed'`. */
   get isFailed(): boolean { return this._phase.kind === 'failed'; }
 
   // ── Timing ───────────────────────────────────────────────────────────────
@@ -324,7 +325,7 @@ export class GameLoop {
   private tick = (): void => {
     if (this._phase.kind !== 'playing') return;
 
-    // 첫 프레임: contextStartTime 재설정 (타이밍 점프 방지)
+    // First frame: reset contextStartTime (prevents a timing jump)
     if (!this.firstTickDone) {
       this.contextStartTime = this.audioContext.currentTime;
       this.firstTickDone = true;
@@ -332,17 +333,17 @@ export class GameLoop {
 
     const currentTime = this.getCurrentTime();
 
-    // GameEngine에 틱 위임 → 커맨드 수신
+    // Delegate the tick to GameEngine → receive commands
     const result = this.engine.tick(currentTime);
 
-    // ── 사이드 이펙트 실행 ──────────────────────────────────────────────────
+    // ── Execute side effects ────────────────────────────────────────────────
 
-    // 1. 사운드 재생
+    // 1. Play sounds
     for (const cmd of result.sounds) {
       if (cmd.type === 'playSound') {
         let targetContextTime = 0;
         if (cmd.gameTimeMs > 0) {
-          // 스케줄링된 BGM: AudioContext 절대 시간으로 변환
+          // Scheduled BGM: convert to absolute AudioContext time
           targetContextTime = this.contextStartTime +
             (cmd.gameTimeMs / this.playbackRate - this.startOffset) / 1000;
         }
@@ -350,20 +351,20 @@ export class GameLoop {
       }
     }
 
-    // 2. 판정 콜백
+    // 2. Judgment callbacks
     for (const ev of result.judgments) {
       this.callbacks.onJudgment?.(ev);
     }
 
-    // 3. 지뢰 콜백
+    // 3. Landmine callbacks
     for (const ev of result.landmines) {
       this.callbacks.onLandmineTrigger?.(ev);
     }
 
-    // 4. 키 입력 콜백 (오토플레이 key-press)
+    // 4. Key input callbacks (autoplay key-press)
     for (const ki of result.keyInputs) {
       this.callbacks.onKeyInput?.(ki.column, ki.held);
-      // 오토플레이: press 이후 짧은 시간 후 release 시뮬레이션
+      // Autoplay: simulate a release shortly after the press
       if (ki.held) {
         const timer = setTimeout(() => {
           this.callbacks.onKeyInput?.(ki.column, false);
@@ -372,7 +373,7 @@ export class GameLoop {
       }
     }
 
-    // 5. 상태 업데이트
+    // 5. State update
     if (result.state) {
       const flags = gamePhaseToFlags(this._phase);
       const loopState: GameLoopState = {
@@ -402,7 +403,7 @@ export class GameLoop {
       this.callbacks.onUpdate?.(loopState);
     }
 
-    // 6. 완료 / 실패 처리
+    // 6. Handle completion / failure
     if (result.completed) {
       this.handleComplete(result.completed, currentTime);
       return;
@@ -412,7 +413,7 @@ export class GameLoop {
       return;
     }
 
-    // 다음 프레임 예약
+    // Schedule the next frame
     this.animationFrameId = requestAnimationFrame(this.tick);
   };
 
@@ -422,7 +423,7 @@ export class GameLoop {
     const currentTime = this.getCurrentTime();
     const result = this.engine.handleKeyDown(input.column, currentTime);
 
-    // 사이드 이펙트 실행
+    // Execute side effects
     for (const cmd of result.sounds) {
       if (cmd.type === 'playSound') {
         this.keysoundPlayer.play(cmd.keysound, cmd.offset, 0, cmd.volume);
@@ -459,7 +460,7 @@ export class GameLoop {
     this.inputHandler.setEnabled(false);
     this.clearAutoplayTimers();
 
-    // 최종 상태 전달
+    // Deliver the final state
     const engineState = this.engine.buildState(finalTime);
     const flags = gamePhaseToFlags(this._phase);
     this.callbacks.onUpdate?.({
