@@ -294,9 +294,11 @@ export class WorkerGameLoop {
     }
 
     // Forward to Worker for judgment (async)
+    // Absolute (epoch) timestamp: worker and window have different
+    // performance.now() origins, so the worker converts this to game time.
     this.postToWorker({
       type: 'keyDown',
-      payload: { column, time: performance.now() },
+      payload: { column, time: performance.timeOrigin + performance.now() },
     });
   };
 
@@ -308,7 +310,7 @@ export class WorkerGameLoop {
 
     this.postToWorker({
       type: 'keyUp',
-      payload: { column, time: performance.now() },
+      payload: { column, time: performance.timeOrigin + performance.now() },
     });
   };
 

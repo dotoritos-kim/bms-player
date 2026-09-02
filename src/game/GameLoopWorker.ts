@@ -227,17 +227,33 @@ function handleStop(): void {
   post({ type: 'stopAll' });
 }
 
-function handleKeyDown(column: string, _time: number): void {
+/**
+ * Game time at which a key event actually happened. The main thread stamps
+ * events with an absolute (epoch) time; using it instead of "now" removes
+ * postMessage queueing latency from every judgment. Falls back to the
+ * worker clock when the stamp is missing or implausible.
+ */
+function gameTimeForInput(eventEpochMs: number | undefined): number {
+  const now = getCurrentGameTime();
+  if (!engine || !engine.isPlaying || engine.isPaused) return now;
+  if (typeof eventEpochMs !== 'number' || !Number.isFinite(eventEpochMs)) return now;
+  const startEpoch = performance.timeOrigin + startTimestamp;
+  const elapsed = eventEpochMs - startEpoch;
+  const t = (elapsed + startOffset) * playbackRate;
+  // Reject stamps from a different clock domain or older than a second.
+  if (!Number.isFinite(t) || t > now + 5 || t < now - 1000) return now;
+  return t;
+}
+
+function handleKeyDown(column: string, time: number): void {
   if (!engine) return;
-  const currentTime = getCurrentGameTime();
-  const result = engine.handleKeyDown(column, currentTime);
+  const result = engine.handleKeyDown(column, gameTimeForInput(time));
   processTickResult(result);
 }
 
-function handleKeyUp(column: string, _time: number): void {
+function handleKeyUp(column: string, time: number): void {
   if (!engine) return;
-  const currentTime = getCurrentGameTime();
-  const result = engine.handleKeyUp(column, currentTime);
+  const result = engine.handleKeyUp(column, gameTimeForInput(time));
   processTickResult(result);
 }
 
