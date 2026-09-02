@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: dotoritos-kim/bms-core
-          token: ${{ secrets.WORKSPACE_REPO_TOKEN || secrets.SIBLING_REPO_TOKEN || github.token }}
+          token: ${{ github.token }}
           path: bms-core
         continue-on-error: true
 
