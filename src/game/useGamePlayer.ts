@@ -216,6 +216,12 @@ export function useGamePlayer(
         gameLoopRef.current.dispose();
         gameLoopRef.current = null;
       }
+      // The shared InputHandler is owned here; drop its window listeners so a
+      // mount/unmount without START does not leak capture-phase key handlers.
+      if (inputHandlerRef.current) {
+        inputHandlerRef.current.dispose();
+        inputHandlerRef.current = null;
+      }
     };
   }, [notechart, keysoundPlayer, options.playSide]);
 
@@ -335,13 +341,19 @@ export function useGamePlayer(
   }, []);
 
   // Action: restart
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restart = useCallback(() => {
     stop();
     // Start after a short delay
-    setTimeout(() => {
+    if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+    restartTimerRef.current = setTimeout(() => {
+      restartTimerRef.current = null;
       start();
     }, 100);
   }, [stop, start]);
+  useEffect(() => () => {
+    if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+  }, []);
 
   // Action: change Hi-Speed
   const setHiSpeedAction = useCallback((speed: number) => {

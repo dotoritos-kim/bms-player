@@ -147,6 +147,8 @@ export class GameLoop {
   private readonly keysoundPlayer: KeysoundPlayer;
   private readonly audioContext: AudioContext;
   private readonly inputHandler: InputHandler;
+  /** True when this loop created its InputHandler (and therefore owns its lifecycle). */
+  private readonly ownsInputHandler: boolean;
   private readonly callbacks: GameLoopCallbacks;
 
   // Timing (GameLoop specific: AudioContext-based clock)
@@ -175,6 +177,7 @@ export class GameLoop {
     this.playbackRate = Math.max(0.1, Math.min(4, config.playbackRate ?? 1));
 
     // Input handler
+    this.ownsInputHandler = !config.inputHandler;
     this.inputHandler = config.inputHandler ?? new InputHandler();
     this.inputHandler.onKeyDown(this.handleKeyDown);
     this.inputHandler.onKeyUp(this.handleKeyUp);
@@ -234,6 +237,10 @@ export class GameLoop {
     this.inputHandler.setEnabled(false);
     cancelAnimationFrame(this.animationFrameId);
     this.keysoundPlayer.stopAll();
+    // The rAF loop is stopped, so push the paused state explicitly —
+    // otherwise React consumers never see `isPaused` and the pause menu
+    // cannot appear.
+    this.callbacks.onUpdate?.(this.getState());
   }
 
   resume(): void {
@@ -248,16 +255,19 @@ export class GameLoop {
     this.contextStartTime += pauseDuration / 1000;
 
     this.inputHandler.setEnabled(true);
+    this.callbacks.onUpdate?.(this.getState());
     this.tick();
   }
 
   stop(): void {
+    const wasActive = this._phase.kind !== 'ready';
     this._phase = PHASE_READY;
     this.engine.stop();
     cancelAnimationFrame(this.animationFrameId);
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
     this.clearAutoplayTimers();
+    if (wasActive) this.callbacks.onUpdate?.(this.getState());
   }
 
   // ── Phase / derived getters (external API compatibility) ─────────────────
@@ -537,7 +547,14 @@ export class GameLoop {
 
   dispose(): void {
     this.stop();
-    this.inputHandler.dispose();
+    // Only tear down an InputHandler we created. An injected handler is
+    // shared across restarts by the caller (useGamePlayer) and must keep its
+    // window listeners alive.
+    if (this.ownsInputHandler) {
+      this.inputHandler.dispose();
+    } else {
+      this.inputHandler.setEnabled(false);
+    }
   }
 }
 

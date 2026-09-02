@@ -164,9 +164,15 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
       }
     }, [judgmentQueue.length]);
 
-    // Detect game state reset (cleanup when a new game starts)
+    // Detect game state reset (cleanup when a new game starts). Reset both
+    // when the loop reports the idle state *and* on the ready→playing edge, so
+    // a restart whose first update already has `isPlaying === true` does not
+    // keep the previous run's judged notes hidden.
+    const wasPlayingRef = useRef(false);
     useEffect(() => {
-      if (!gameState.isPlaying && gameState.currentTime === 0) {
+      const startedNow = gameState.isPlaying && !wasPlayingRef.current;
+      wasPlayingRef.current = gameState.isPlaying;
+      if (startedNow || (!gameState.isPlaying && gameState.currentTime === 0)) {
         judgedNoteIdsRef.current.clear();
         setJudgedNoteIds(new Set());
         setTriggeredMineIds(new Set());

@@ -15,6 +15,7 @@ import {
   PHASE_PAUSED,
   PHASE_COMPLETED,
   PHASE_FAILED,
+  gamePhaseToFlags,
 } from '../types/GamePhase';
 import type { KeyColumn } from './InputHandler';
 import { InputHandler } from './InputHandler';
@@ -51,6 +52,8 @@ export class WorkerGameLoop {
   private keysoundPlayer: KeysoundPlayer;
   private audioContext: AudioContext;
   private inputHandler: InputHandler;
+  /** True when this loop created its InputHandler (and therefore owns its lifecycle). */
+  private readonly ownsInputHandler: boolean;
   private callbacks: GameLoopCallbacks;
   private playbackRate: number;
   private startOffset: number;
@@ -80,6 +83,7 @@ export class WorkerGameLoop {
     this.startOffset = config.startOffset ?? 0;
 
     // Input handler
+    this.ownsInputHandler = !config.inputHandler;
     this.inputHandler = config.inputHandler ?? new InputHandler();
     this.inputHandler.onKeyDown(this.handleKeyDown);
     this.inputHandler.onKeyUp(this.handleKeyUp);
@@ -179,6 +183,7 @@ export class WorkerGameLoop {
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
     this.postToWorker({ type: 'pause' });
+    this.emitPhaseState();
   }
 
   resume(): void {
@@ -189,20 +194,61 @@ export class WorkerGameLoop {
     this.contextStartTime += pauseDuration / 1000;
     this.inputHandler.setEnabled(true);
     this.postToWorker({ type: 'resume' });
+    this.emitPhaseState();
   }
 
   stop(): void {
+    const wasActive = this._phase.kind !== 'ready';
     this._phase = PHASE_READY;
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
     this.postToWorker({ type: 'stop' });
+    if (wasActive) this.emitPhaseState();
   }
 
   dispose(): void {
     this.stop();
-    this.inputHandler.dispose();
+    // The InputHandler and the Worker are injected by the caller, which owns
+    // their lifecycle: useGamePlayer reuses both across restarts, so
+    // terminating the worker here would make every RETRY hang on `init`.
+    if (this.ownsInputHandler) {
+      this.inputHandler.dispose();
+    } else {
+      this.inputHandler.setEnabled(false);
+    }
     this.postToWorker({ type: 'dispose' });
-    this.worker.terminate();
+    this.worker.onmessage = null;
+    this.worker.onerror = null;
+  }
+
+  /**
+   * The worker only emits `update` while ticking, so phase transitions made
+   * on the main thread (pause/resume/stop) must be pushed to consumers here.
+   */
+  private emitPhaseState(): void {
+    const flags = gamePhaseToFlags(this._phase);
+    const base: GameLoopState = this._lastState ?? {
+      phase: this._phase,
+      isPlaying: false, isPaused: false, isFailed: false, isCompleted: false,
+      currentTime: 0, visualTime: 0, currentBeat: 0, combo: 0, gaugeValue: 0, exScore: 0,
+      lastJudgment: null, lastOffset: 0, activeHoldNoteIds: new Set<number>(),
+      pgreatCount: 0, greatCount: 0, goodCount: 0, badCount: 0, poorCount: 0, missCount: 0,
+      maxCombo: 0, recentOffsets: [],
+    };
+    const currentTime = this._phase.kind === 'ready' ? 0 : this.getCurrentTime();
+    this._lastState = {
+      ...base,
+      phase: this._phase,
+      isPlaying: flags.isPlaying,
+      isPaused: flags.isPaused,
+      isFailed: flags.isFailed,
+      isCompleted: flags.isCompleted,
+      currentTime,
+      visualTime: this._phase.kind === 'ready' ? 0 : base.visualTime,
+      currentBeat: this._phase.kind === 'ready' ? 0 : base.currentBeat,
+      activeHoldNoteIds: this._phase.kind === 'ready' ? new Set<number>() : base.activeHoldNoteIds,
+    };
+    this.callbacks.onUpdate?.(this._lastState);
   }
 
   // ==================== State ====================
