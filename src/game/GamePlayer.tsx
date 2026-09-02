@@ -11,6 +11,7 @@ import { useGamePlayer, type GamePlayerOptions } from './useGamePlayer';
 import { JudgmentEngine } from './JudgmentEngine';
 import { GaugeSystem, type GaugeType, getGaugeClearTarget } from './GaugeSystem';
 import type { ScoreState } from './ScoreManager';
+import { useI18n } from '../i18n';
 
 // ============ Types ============
 
@@ -62,48 +63,14 @@ const LoadingScreen: React.FC<{ message?: string }> = ({ message = 'Loading...' 
   </div>
 );
 
-/** Ready-to-start screen (currently unused — kept for future wiring) */
-const _ReadyScreen: React.FC<{ onStart: () => void }> = ({ onStart }) => (
-  <div
-    style={{
-      position: 'absolute',
-      inset: 0,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'rgba(0, 0, 0, 0.8)',
-      color: '#fff',
-      fontFamily: 'sans-serif',
-    }}
-  >
-    <div style={{ fontSize: 32, marginBottom: 20 }}>READY</div>
-    <button
-      onClick={onStart}
-      style={{
-        padding: '15px 40px',
-        fontSize: 20,
-        background: '#ff6600',
-        color: '#fff',
-        border: 'none',
-        borderRadius: 8,
-        cursor: 'pointer',
-      }}
-    >
-      START
-    </button>
-    <div style={{ marginTop: 20, fontSize: 14, color: '#888' }}>
-      Press SPACE or click to start
-    </div>
-  </div>
-);
-
 /** Pause screen */
 const PauseScreen: React.FC<{
   onResume: () => void;
   onRestart: () => void;
   onExit: () => void;
-}> = ({ onResume, onRestart, onExit }) => (
+}> = ({ onResume, onRestart, onExit }) => {
+  const { t } = useI18n();
+  return (
   <div
     style={{
       position: 'absolute',
@@ -117,7 +84,7 @@ const PauseScreen: React.FC<{
       fontFamily: 'sans-serif',
     }}
   >
-    <div style={{ fontSize: 32, marginBottom: 30 }}>PAUSED</div>
+    <div style={{ fontSize: 32, marginBottom: 30 }}>{t('screens.pause.title')}</div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <button
         onClick={onResume}
@@ -131,7 +98,7 @@ const PauseScreen: React.FC<{
           cursor: 'pointer',
         }}
       >
-        RESUME
+        {t('screens.pause.resume')}
       </button>
       <button
         onClick={onRestart}
@@ -145,7 +112,7 @@ const PauseScreen: React.FC<{
           cursor: 'pointer',
         }}
       >
-        RESTART
+        {t('screens.pause.restart')}
       </button>
       <button
         onClick={onExit}
@@ -159,11 +126,12 @@ const PauseScreen: React.FC<{
           cursor: 'pointer',
         }}
       >
-        EXIT
+        {t('screens.pause.exit')}
       </button>
     </div>
   </div>
-);
+  );
+};
 
 /** Result screen */
 const ResultScreen: React.FC<{
@@ -173,6 +141,7 @@ const ResultScreen: React.FC<{
   onRestart: () => void;
   onExit: () => void;
 }> = ({ score, cleared, gaugeType: _gaugeType, onRestart, onExit }) => {
+  const { t } = useI18n();
   // Compute DJ level
   const exScoreRate = score.totalNotes > 0 ? score.exScore / (score.totalNotes * 2) : 0;
   let djLevel = 'F';
@@ -209,7 +178,7 @@ const ResultScreen: React.FC<{
           color: cleared ? '#00ff00' : '#ff0000',
         }}
       >
-        {cleared ? 'CLEAR!' : 'FAILED'}
+        {cleared ? t('screens.result.clear') : t('screens.result.failed')}
       </div>
 
       {/* DJ level */}
@@ -227,13 +196,13 @@ const ResultScreen: React.FC<{
       {/* Full combo indicator */}
       {isFullCombo && (
         <div style={{ fontSize: 24, color: '#00ffff', marginBottom: 10 }}>
-          FULL COMBO!
+          {t('screens.result.fullCombo')}
         </div>
       )}
 
       {/* EX score */}
       <div style={{ fontSize: 32, marginBottom: 20 }}>
-        EX SCORE: <span style={{ color: '#ffcc00' }}>{score.exScore}</span>
+        {t('screens.result.exScore')} <span style={{ color: '#ffcc00' }}>{score.exScore}</span>
         <span style={{ fontSize: 18, color: '#888' }}> / {score.totalNotes * 2}</span>
       </div>
 
@@ -263,7 +232,7 @@ const ResultScreen: React.FC<{
 
       {/* Max combo */}
       <div style={{ fontSize: 20, marginBottom: 30 }}>
-        MAX COMBO: <span style={{ color: '#00ffff' }}>{score.maxCombo}</span>
+        {t('screens.result.maxCombo')} <span style={{ color: '#00ffff' }}>{score.maxCombo}</span>
       </div>
 
       {/* Buttons */}
@@ -280,7 +249,7 @@ const ResultScreen: React.FC<{
             cursor: 'pointer',
           }}
         >
-          RETRY
+          {t('screens.result.retry')}
         </button>
         <button
           onClick={onExit}
@@ -294,7 +263,7 @@ const ResultScreen: React.FC<{
             cursor: 'pointer',
           }}
         >
-          EXIT
+          {t('screens.result.exit')}
         </button>
       </div>
     </div>
@@ -365,6 +334,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
   onComplete,
   onExit,
 }) => {
+  const { t } = useI18n();
   const canvasRef = useRef<GameCanvasHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -756,7 +726,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
             fontFamily: 'sans-serif',
           }}
         >
-          <div style={{ fontSize: 32, marginBottom: 20 }}>READY</div>
+          <div style={{ fontSize: 32, marginBottom: 20 }}>{t('screens.ready.title')}</div>
 
           {/* Speed settings */}
           <div
@@ -771,15 +741,15 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
               fontFamily: 'monospace',
             }}
           >
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>HI-SPEED (↑↓ adjust)</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>{t('screens.ready.hiSpeedLabel')}</div>
             <div style={{ fontSize: 32, fontWeight: 'bold', color: '#ffcc00' }}>
               {currentHiSpeed.toFixed(2)}
             </div>
             <div style={{ fontSize: 13, color: '#aaa', marginTop: 6 }}>
-              BPM {Math.round(baseBpm)} × {currentHiSpeed.toFixed(2)} = {Math.round(baseBpm * currentHiSpeed)}
+              {t('screens.ready.bpmFormula', { bpm: Math.round(baseBpm), hiSpeed: currentHiSpeed.toFixed(2), effective: Math.round(baseBpm * currentHiSpeed) })}
             </div>
             <div style={{ fontSize: 14, color: '#00ffcc', marginTop: 4 }}>
-              GREEN NUMBER: {greenNumber}
+              {t('screens.ready.greenNumber', { value: greenNumber })}
             </div>
             <div
               style={{
@@ -791,7 +761,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
               }}
               onClick={() => setFloatingHiSpeed(prev => !prev)}
             >
-              {floatingHiSpeed ? '● FLOATING HI-SPEED ON' : '○ FLOATING HI-SPEED OFF'}
+              {floatingHiSpeed ? t('screens.ready.floatingOn') : t('screens.ready.floatingOff')}
               <span style={{ fontSize: 10, color: '#666', marginLeft: 6 }}>(` key)</span>
             </div>
           </div>
@@ -808,13 +778,13 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
               cursor: 'pointer',
             }}
           >
-            START
+            {t('screens.ready.start')}
           </button>
           <div style={{ marginTop: 20, fontSize: 14, color: '#888' }}>
-            Press SPACE or click to start
+            {t('screens.ready.pressToStart')}
           </div>
           <div style={{ marginTop: 6, fontSize: 11, color: '#555' }}>
-            ↑↓ Hi-Speed ±0.25 | PgUp/PgDn ±1.0 | ` Floating
+            {t('screens.ready.keyHint')}
           </div>
         </div>
       )}

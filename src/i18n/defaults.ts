@@ -38,6 +38,35 @@ export const defaultMessages = {
     completed: 'Completed',
     failed: 'Failed',
   },
+  screens: {
+    ready: {
+      title: 'READY',
+      hiSpeedLabel: 'HI-SPEED (↑↓ adjust)',
+      bpmFormula: 'BPM {{bpm}} × {{hiSpeed}} = {{effective}}',
+      greenNumber: 'GREEN NUMBER: {{value}}',
+      floatingOn: '● FLOATING HI-SPEED ON',
+      floatingOff: '○ FLOATING HI-SPEED OFF',
+      floatingKey: '(` key)',
+      start: 'START',
+      pressToStart: 'Press SPACE or click to start',
+      keyHint: '↑↓ Hi-Speed ±0.25 | PgUp/PgDn ±1.0 | ` Floating',
+    },
+    pause: {
+      title: 'PAUSED',
+      resume: 'RESUME',
+      restart: 'RESTART',
+      exit: 'EXIT',
+    },
+    result: {
+      clear: 'CLEAR!',
+      failed: 'FAILED',
+      fullCombo: 'FULL COMBO!',
+      exScore: 'EX SCORE:',
+      maxCombo: 'MAX COMBO:',
+      retry: 'RETRY',
+      exit: 'EXIT',
+    },
+  },
 } as const;
 
 export type BmsPlayerMessages = typeof defaultMessages;
