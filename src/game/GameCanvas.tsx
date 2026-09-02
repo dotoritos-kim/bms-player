@@ -144,25 +144,22 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
     React.useImperativeHandle(ref, () => ({ triggerHitEffect }), [triggerHitEffect]);
 
     // Handle judgment events (queue based — supports simultaneous judgments)
-    const processedQueueLenRef = useRef(0);
+    // The queue is bounded (oldest events are dropped), so track the last
+    // processed event by identity rather than by index.
+    const lastProcessedRef = useRef<JudgmentEvent | null>(null);
     useEffect(() => {
-      if (judgmentQueue.length > processedQueueLenRef.current) {
-        const newEvents = judgmentQueue.slice(processedQueueLenRef.current);
-        for (const event of newEvents) {
-          triggerHitEffect(event.column, event.judgment);
-          judgedNoteIdsRef.current.add(event.noteId);
-        }
-        processedQueueLenRef.current = judgmentQueue.length;
-        setJudgedNoteIds(new Set(judgedNoteIdsRef.current));
+      if (judgmentQueue.length === 0) { lastProcessedRef.current = null; return; }
+      const last = lastProcessedRef.current;
+      const idx = last ? judgmentQueue.lastIndexOf(last) : -1;
+      const newEvents = judgmentQueue.slice(idx + 1);
+      if (newEvents.length === 0) return;
+      for (const event of newEvents) {
+        triggerHitEffect(event.column, event.judgment);
+        judgedNoteIdsRef.current.add(event.noteId);
       }
+      lastProcessedRef.current = judgmentQueue[judgmentQueue.length - 1];
+      setJudgedNoteIds(new Set(judgedNoteIdsRef.current));
     }, [judgmentQueue, triggerHitEffect]);
-
-    // Reset the counter when the queue is reset
-    useEffect(() => {
-      if (judgmentQueue.length === 0) {
-        processedQueueLenRef.current = 0;
-      }
-    }, [judgmentQueue.length]);
 
     // Detect game state reset (cleanup when a new game starts). Reset both
     // when the loop reports the idle state *and* on the ready→playing edge, so

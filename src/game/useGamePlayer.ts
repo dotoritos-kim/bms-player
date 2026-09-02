@@ -24,6 +24,9 @@ import {
   KEY_MAP_2P,
 } from './index';
 
+/** Max judgment events kept in the React-visible queue. */
+const JUDGMENT_QUEUE_MAX = 64;
+
 export interface GamePlayerOptions {
   /** Gauge type */
   gaugeType?: GaugeType;
@@ -234,7 +237,9 @@ export function useGamePlayer(
     },
     onJudgment: (event) => {
       setLastJudgment(event);
-      setJudgmentQueue(prev => [...prev, event]);
+      // Bounded: consumers only need the events they have not seen yet, and
+      // an unbounded array meant an O(n) clone per note for the whole song.
+      setJudgmentQueue(prev => (prev.length >= JUDGMENT_QUEUE_MAX ? [...prev.slice(-(JUDGMENT_QUEUE_MAX - 1)), event] : [...prev, event]));
     },
     onLandmineTrigger: (event: LandmineEvent) => {
       setTriggeredMineIds((prev) => {
