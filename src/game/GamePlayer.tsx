@@ -762,7 +762,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
               onClick={() => setFloatingHiSpeed(prev => !prev)}
             >
               {floatingHiSpeed ? t('screens.ready.floatingOn') : t('screens.ready.floatingOff')}
-              <span style={{ fontSize: 10, color: '#666', marginLeft: 6 }}>(` key)</span>
+              <span style={{ fontSize: 10, color: '#666', marginLeft: 6 }}>{t('screens.ready.floatingKey')}</span>
             </div>
           </div>
 
