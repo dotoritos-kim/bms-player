@@ -106,7 +106,7 @@ export class InputHandler {
     this.heldKeys.add(column);
 
     const input: KeyInput = { column, time, type: 'down' };
-    this.pendingInputs.push(input);
+    this.enqueue(input);
 
     // Invoke the callback
     this.onKeyDownCallback?.(input);
@@ -124,7 +124,7 @@ export class InputHandler {
     this.heldKeys.delete(column);
 
     const input: KeyInput = { column, time, type: 'up' };
-    this.pendingInputs.push(input);
+    this.enqueue(input);
 
     // Invoke the callback
     this.onKeyUpCallback?.(input);
@@ -186,6 +186,13 @@ export class InputHandler {
   onKeyUp(callback: (input: KeyInput) => void): void {
     this.onKeyUpCallback = callback;
   }
+
+  /** Bounded queue: nothing drains it during play, so cap it instead of growing for the whole session. */
+  private enqueue(input: KeyInput): void {
+    if (this.pendingInputs.length >= InputHandler.MAX_PENDING_INPUTS) this.pendingInputs.shift();
+    this.pendingInputs.push(input);
+  }
+  private static readonly MAX_PENDING_INPUTS = 256;
 
   /**
    * Enables/disables input.
