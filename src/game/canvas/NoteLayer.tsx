@@ -53,7 +53,7 @@ export const NotesRenderer: React.FC<{
     if (!meshRef.current) return;
     const mesh = meshRef.current;
     const minPos = currentPosition - 0.5;
-    const maxPos = currentPosition + VISIBLE_BEATS * hiSpeed;
+    const maxPos = currentPosition + VISIBLE_BEATS / hiSpeed;
     let count = 0;
 
     for (const note of notes) {
@@ -115,7 +115,7 @@ export const LandmineRenderer: React.FC<{
     if (!meshRef.current) return;
     const mesh = meshRef.current;
     const minPos = currentPosition - 0.5;
-    const maxPos = currentPosition + VISIBLE_BEATS * hiSpeed;
+    const maxPos = currentPosition + VISIBLE_BEATS / hiSpeed;
     let count = 0;
 
     for (const mine of landmines) {
@@ -178,7 +178,7 @@ export const LongNotesRenderer: React.FC<{
     const headTailMesh = headTailRef.current;
     const bodyMesh = bodyRef.current;
     const minPos = currentPosition - 0.5;
-    const maxPos = currentPosition + VISIBLE_BEATS * hiSpeed + 10;
+    const maxPos = currentPosition + VISIBLE_BEATS / hiSpeed + 10;
     let headTailCount = 0;
     let bodyCount = 0;
 

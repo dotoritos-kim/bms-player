@@ -151,6 +151,21 @@ export class GameEngine {
   private lastUpdateTime: number = 0;
   private readonly UPDATE_INTERVAL = 4; // ~240fps
 
+  /** Grace period after the last chart event before the run is declared complete. */
+  private readonly END_TAIL_MS = 1000;
+
+  /**
+   * Game time (ms) at which the chart is considered finished. A chart with
+   * no timed events (duration 0) has nothing to wait for and completes at
+   * once, matching the historical contract.
+   */
+  private chartEndTimeMs(): number {
+    const nc = this.notechart;
+    const hasEvents = nc.notes.length > 0 || nc.autos.length > 0 || nc.landmines.length > 0;
+    const duration = Number.isFinite(nc.duration) ? nc.duration : 0;
+    return hasEvents && duration > 0 ? duration * 1000 + this.END_TAIL_MS : 0;
+  }
+
   // Recent offsets
   private recentOffsets: number[] = [];
   private recentOffsetsSnapshot: number[] = [];
@@ -298,9 +313,13 @@ export class GameEngine {
     // 7. Build nextNotes for each column
     this.buildNextNotes(result);
 
-    // 8. Completion check
+    // 8. Completion check — every note judged, no holds active, all BGM
+    // events dispatched *and* playback has actually reached the end of the
+    // chart (autoIndex runs 50ms ahead of the clock, and a scheduled BGM is
+    // not the same as a finished one), plus a short tail so the last
+    // keysound is not cut off by the result screen.
     if (this.pendingNotes.length === 0 && this.activeHolds.size === 0) {
-      if (this.autoIndex >= this.sortedAutos.length) {
+      if (this.autoIndex >= this.sortedAutos.length && currentTime >= this.chartEndTimeMs()) {
         this._phase = PHASE_COMPLETED;
         result.state = this.buildState(currentTime);
         result.completed = this.score.getState();

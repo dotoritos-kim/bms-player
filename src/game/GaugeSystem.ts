@@ -59,6 +59,11 @@ const GAUGE_CONFIGS: Record<GaugeType, GaugeConfig> = {
   },
 };
 
+/** Clear threshold (%) for a gauge type — the value the gauge must reach at the end of the song. */
+export function getGaugeClearTarget(type: GaugeType): number {
+  return GAUGE_CONFIGS[type].clearTarget;
+}
+
 export interface GaugeSystemState {
   type: GaugeType;
   value: number;

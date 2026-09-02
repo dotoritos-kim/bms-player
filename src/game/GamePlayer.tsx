@@ -9,7 +9,7 @@ import type { KeysoundPlayer } from '../types/KeysoundPlayer';
 import { GameCanvas, type GameCanvasHandle, getLaneConfigForSide } from './GameCanvas';
 import { useGamePlayer, type GamePlayerOptions } from './useGamePlayer';
 import { JudgmentEngine } from './JudgmentEngine';
-import { GaugeSystem, type GaugeType } from './GaugeSystem';
+import { GaugeSystem, type GaugeType, getGaugeClearTarget } from './GaugeSystem';
 import type { ScoreState } from './ScoreManager';
 
 // ============ Types ============
@@ -332,12 +332,12 @@ const GaugeBar: React.FC<{ value: number; type: GaugeType }> = ({ value, type })
           animation: isDanger ? 'blink 0.5s infinite' : undefined,
         }}
       />
-      {/* 80% line (clear threshold) */}
-      {(type === 'groove' || type === 'easy') && (
+      {/* Clear-threshold line (80% groove/easy, 60% assist-easy) */}
+      {getGaugeClearTarget(type) >= 1 && (
         <div
           style={{
             position: 'absolute',
-            bottom: '80%',
+            bottom: `${getGaugeClearTarget(type)}%`,
             left: 0,
             right: 0,
             height: 2,
@@ -463,7 +463,11 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
 
   // Result screen display condition
   const showResult = state.isCompleted || state.isFailed;
-  const cleared = state.isCompleted && !state.isFailed;
+  // A run only clears when the gauge finished at or above the gauge's clear
+  // target (80% groove/easy, 60% assist-easy); survival gauges clear on any
+  // non-failed finish. Previously any non-failed finish showed CLEAR.
+  const cleared = state.isCompleted && !state.isFailed
+    && state.gaugeValue >= getGaugeClearTarget(gaugeType);
 
   // Fullscreen toggle
   const toggleFullscreen = useCallback(async () => {
