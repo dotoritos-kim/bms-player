@@ -669,7 +669,10 @@ export class GameEngine {
       activeHoldNoteIds.add(note.id);
     }
 
-    const currentBeat = this.notechart.secondsToBeat(currentTime / 1000);
+    // Rendering follows the visual clock (currentTime + visualOffset) so the
+    // Visual Offset option actually shifts what the player sees.
+    const visualTime = currentTime + this.visualOffset;
+    const currentBeat = this.notechart.secondsToBeat(visualTime / 1000);
 
     const flags = gamePhaseToFlags(this._phase);
     return {
@@ -679,7 +682,7 @@ export class GameEngine {
       isFailed: flags.isFailed,
       isCompleted: flags.isCompleted,
       currentTime,
-      visualTime: currentTime + this.visualOffset,
+      visualTime,
       currentBeat,
       combo: this.score.currentCombo,
       gaugeValue: this.gauge.getValue(),

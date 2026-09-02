@@ -43,6 +43,8 @@ export interface GamePlayerOptions {
   judgmentOffset?: number;
   /** Visual offset (ms, positive = notes displayed later) */
   visualOffset?: number;
+  /** Audio output latency compensation in ms (applied to keysound scheduling / judgment timing). */
+  audioLatency?: number;
   /** Auto start */
   autoStart?: boolean;
   /** Autoplay mode */
@@ -291,6 +293,7 @@ export function useGamePlayer(
       playbackRate: opts.playbackRate ?? 1,
       judgmentOffset: opts.judgmentOffset ?? 0,
       visualOffset: opts.visualOffset ?? 0,
+      audioLatency: opts.audioLatency ?? 0,
       autoplay: opts.autoplay ?? false,
     };
 
