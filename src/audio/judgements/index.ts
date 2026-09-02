@@ -274,6 +274,7 @@ export class Notechart {
                 spec.keysoundStart = note.keysoundStart;
                 spec.keysoundEnd = note.keysoundEnd;
                 spec.volume = this._keysounds.getVolume(note.keysound) / 100;
+                if (typeof note.damage === 'number') spec.damage = note.damage;
                 this._updateDuration(spec);
                 if (note.endBeat !== undefined) {
                     spec.end = this._generateEvent(note.endBeat);

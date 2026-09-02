@@ -63,6 +63,8 @@ export interface GameNote extends SoundedEvent {
     id: number; // Note ID.
     end?: GameEvent; // For long notes, the end event (optional).
     column: string; // Column the note sits in.
+    /** Landmine damage (% of gauge) from the chart's #xxxD1 value; undefined for regular notes. */
+    damage?: number;
 }
 
 /** A landmine note in the game. */

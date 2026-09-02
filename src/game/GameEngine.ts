@@ -617,7 +617,8 @@ export class GameEngine {
 
       if (distance <= mineWindow) {
         this.pendingLandmines.splice(i, 1);
-        const damage = 5;
+        // Chart-defined damage (#xxxD1 value), falling back to the historical 5%.
+        const damage = typeof mine.damage === 'number' && mine.damage > 0 ? mine.damage : 5;
         this.gauge.applyDamage(damage);
 
         result.landmines.push({
