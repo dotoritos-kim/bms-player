@@ -556,7 +556,11 @@ export class GameEngine {
         continue;
       }
 
-      if (adjustedTime >= note.end.time * 1000 - this.judgment.getWindows().great) {
+      // Auto-resolve only once the release window has *passed*. Resolving at
+      // `end - great` (as before) pre-empted every key-up inside the window,
+      // so a long-note tail could never score PGREAT; handleKeyUp judges
+      // releases that land inside the window.
+      if (adjustedTime >= note.end.time * 1000 + this.judgment.getWindows().great) {
         this.activeHolds.delete(column);
         this.onNoteJudgment(note, 'GREAT', 0, currentTime, result);
       }
