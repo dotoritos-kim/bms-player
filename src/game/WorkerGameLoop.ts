@@ -344,10 +344,16 @@ export class WorkerGameLoop {
         this.keysoundPlayer.stopAll();
         break;
 
-      case 'update':
+      case 'update': {
+        // A tick queued before 'pause'/'stop' reached the worker can arrive
+        // after emitPhaseState() published the paused/ready state; applying
+        // it would flip isPaused back to false and hide the pause menu while
+        // the worker is actually paused. The main-thread phase is authoritative.
+        if (this._phase.kind === 'paused' || this._phase.kind === 'ready') break;
         this._lastState = this.deserializeState(msg.payload);
         this.callbacks.onUpdate?.(this._lastState);
         break;
+      }
 
       case 'judgment':
         this.callbacks.onJudgment?.(msg.payload);
