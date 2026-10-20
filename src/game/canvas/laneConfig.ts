@@ -137,13 +137,14 @@ export const LANE_CONFIG_10K_1P: LaneConfig[] = [
   { column: '5',  width: 36, color: '#ffffff', pressedColor: '#aaaaaa' },
 ];
 
-// 10K (5K+SC DP) — 2P
+// 10K (5K+SC DP) — 2P. Columns follow bms-core's IIDX DP mapping: channels
+// 21-25 → columns 8-12, 26 → SC2 (columns 6/7 are 1P keys 6/7, unused in 10K).
 export const LANE_CONFIG_10K_2P: LaneConfig[] = [
-  { column: '6',   width: 36, color: '#ffffff', pressedColor: '#aaaaaa' },
-  { column: '7',   width: 36, color: '#3399ff', pressedColor: '#66bbff' },
-  { column: '8',   width: 36, color: '#ffcc00', pressedColor: '#ffdd66' },
+  { column: '8',   width: 36, color: '#ffffff', pressedColor: '#aaaaaa' },
   { column: '9',   width: 36, color: '#3399ff', pressedColor: '#66bbff' },
-  { column: '10',  width: 36, color: '#ffffff', pressedColor: '#aaaaaa' },
+  { column: '10',  width: 36, color: '#ffcc00', pressedColor: '#ffdd66' },
+  { column: '11',  width: 36, color: '#3399ff', pressedColor: '#66bbff' },
+  { column: '12',  width: 36, color: '#ffffff', pressedColor: '#aaaaaa' },
   { column: 'SC2', width: 50, color: '#ff3366', pressedColor: '#ff6699' },
 ];
 
