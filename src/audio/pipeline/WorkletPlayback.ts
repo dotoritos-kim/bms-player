@@ -9,6 +9,7 @@
 import { AudioProcessorWorkletUrl } from '../loader/AudioProcessor.worklet';
 import type { AudioProcessorPostMessage } from '../loader/types';
 import type { AudioBufferStore } from './AudioBufferStore';
+import { UploadedBuffer, isUploadedBuffer } from './UploadedBuffer';
 import type { EffectChain, EffectSettings } from './EffectChain';
 
 export interface PlayOptions {
@@ -28,6 +29,8 @@ export class WorkletPlayback {
         private readonly ctx: AudioContext,
         private readonly store: AudioBufferStore,
         private readonly effects: EffectChain,
+        /** Drop main-thread PCM once uploaded (keeps an UploadedBuffer stand-in). */
+        private readonly releaseAfterUpload = false,
     ) {}
 
     async initWorklet(workletUrl?: string, effectSettings?: EffectSettings): Promise<void> {
@@ -148,13 +151,25 @@ export class WorkletPlayback {
      */
     private _ensureRegistered(key: string, audioBuffer: AudioBuffer): void {
         if (this.registered.get(key) === audioBuffer) return;
+        if (isUploadedBuffer(audioBuffer)) {
+            // Already in the worklet (registered under this key earlier).
+            this.registered.set(key, audioBuffer);
+            return;
+        }
         const left = audioBuffer.getChannelData(0).slice(0);
         const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1).slice(0) : undefined;
         this._post<AudioProcessorPostMessage>(
             { type: 'register', key, data: { bufferLeft: left, bufferRight: right } },
             { transfer: right ? [left.buffer, right.buffer] : [left.buffer] },
         );
-        this.registered.set(key, audioBuffer);
+        if (this.releaseAfterUpload) {
+            // The worklet owns the samples now; keep only metadata + peaks here.
+            const stub = new UploadedBuffer(audioBuffer) as unknown as AudioBuffer;
+            this.store.replaceLocal(key, stub);
+            this.registered.set(key, stub);
+        } else {
+            this.registered.set(key, audioBuffer);
+        }
     }
 
     // ---- Control ----

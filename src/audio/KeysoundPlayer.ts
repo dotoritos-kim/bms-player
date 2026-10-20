@@ -6,6 +6,7 @@
  * stem-based file resolution via `resolveKeysoundFiles`.
  */
 
+import { keysoundKey } from '@rhythm-archive/bms-core';
 import { AudioPreloader, type FileMap, type WorkerFactory, type AudioPreloaderOptions } from './loader/AudioPreloader';
 import { resolveKeysoundFiles, type ResolveOptions, type AudioFileMapFetcher } from './loader/resolveKeysoundFiles';
 
@@ -47,6 +48,8 @@ export interface KeysoundPlayerOptions {
   baseUrl: string;
   /** Keysound map (ID → filename). */
   keysounds: Record<string, string>;
+  /** `#BASE 62` chart: keysound ids are case-sensitive (default false). */
+  base62?: boolean;
   /** Volume (0.0 – 1.0). */
   volume?: number;
   /** Load progress callback. */
@@ -93,6 +96,7 @@ export class KeysoundPlayer {
       onError: options.onError ?? (() => {}),
       baseUrl: options.baseUrl,
       keysounds: options.keysounds,
+      base62: options.base62 ?? false,
       performanceMode: options.performanceMode ?? true,
       simplifiedEffects: options.simplifiedEffects ?? false,
       workerFactory: options.workerFactory ?? (() => { throw new Error('workerFactory is required for KeysoundPlayer'); }),
@@ -111,10 +115,15 @@ export class KeysoundPlayer {
     }
   }
 
+  /** Map/lookup key: lower-case for base36, case-preserved for #BASE 62. */
+  private key(id: string): string {
+    return keysoundKey(id, this.options.base62 === true);
+  }
+
   private buildFileMap(): void {
     for (const [id, filename] of Object.entries(this.options.keysounds)) {
       const file = filename.replace(/^\//, '');
-      this.fileMap[id.toLowerCase()] = file;
+      this.fileMap[this.key(id)] = file;
     }
   }
 
@@ -138,7 +147,7 @@ export class KeysoundPlayer {
     );
 
     if (Object.keys(resolved).length > 0) {
-      this.fileMap = resolved;
+      this.fileMap = Object.fromEntries(Object.entries(resolved).map(([id, f]) => [this.key(id), f]));
     } else {
       // Resolve failed — fall back to the raw fileMap.
       console.warn('[KeysoundPlayer] Resolve returned no results, falling back to raw filenames');
@@ -185,13 +194,13 @@ export class KeysoundPlayer {
           } else if (type === 'LOADED') {
             const loadedPayload = payload as { key?: string } | undefined;
             if (loadedPayload?.key) {
-              this._loadedKeysounds.add(loadedPayload.key.toLowerCase());
+              this._loadedKeysounds.add(this.key(loadedPayload.key));
             }
           } else if (type === 'ERROR') {
             const errorPayload = payload as { key?: string; fileName?: string; message?: string } | undefined;
             if (errorPayload?.key) {
               this._failedKeysounds.set(
-                errorPayload.key.toLowerCase(),
+                this.key(errorPayload.key),
                 `${errorPayload.fileName || 'unknown'}: ${errorPayload.message || 'Unknown error'}`
               );
             }
@@ -292,7 +301,7 @@ export class KeysoundPlayer {
       return;
     }
 
-    const id = keysoundId.toLowerCase();
+    const id = this.key(keysoundId);
 
     try {
       const t0 = performance.now();
@@ -352,13 +361,13 @@ export class KeysoundPlayer {
 
   getKeysoundDuration(keysoundId: string): number {
     if (!this._preloader || !this._isReady) return 0;
-    const id = keysoundId.toLowerCase();
+    const id = this.key(keysoundId);
     return this._preloader.getAudioDuration(id);
   }
 
   hasKeysound(keysoundId: string): boolean {
     if (!this._preloader || !this._isReady) return false;
-    const id = keysoundId.toLowerCase();
+    const id = this.key(keysoundId);
     return this._preloader.hasAudioBuffer(id);
   }
 
@@ -378,8 +387,8 @@ export class KeysoundPlayer {
     loaded: string[];
     notReferenced: string[];
   } {
-    const uniqueRefs = [...new Set(referencedKeysoundIds.map(id => id.toLowerCase()))];
-    const definedIds = new Set(Object.keys(this.fileMap).map(k => k.toLowerCase()));
+    const uniqueRefs = [...new Set(referencedKeysoundIds.map(id => this.key(id)))];
+    const definedIds = new Set(Object.keys(this.fileMap).map(k => this.key(k)));
 
     const missingDefinitions: string[] = [];
     const failedLoads: Array<{ id: string; error: string }> = [];
@@ -405,7 +414,7 @@ export class KeysoundPlayer {
   logDiagnostics(referencedKeysoundIds: string[]): void {
     const diagnosis = this.diagnoseKeysounds(referencedKeysoundIds);
     const definedIds = Object.keys(this.fileMap);
-    const uniqueRefs = [...new Set(referencedKeysoundIds.map(id => id.toLowerCase()))];
+    const uniqueRefs = [...new Set(referencedKeysoundIds.map(id => this.key(id)))];
 
     console.group('[KeysoundPlayer] Diagnostics');
     console.log(`Total WAV definitions: ${definedIds.length}`);

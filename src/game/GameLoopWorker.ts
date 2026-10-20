@@ -113,7 +113,12 @@ function serializeState(state: GameEngineState): SerializedGameState {
   };
 }
 
-function processTickResult(result: TickResult): void {
+/**
+ * @param postKeyInputs Forward `keyInputs` to the main thread. Only tick
+ *   results carry autoplay presses; key handler results echo the player's own
+ *   input, which WorkerGameLoop already reported when the key was pressed.
+ */
+function processTickResult(result: TickResult, postKeyInputs = false): void {
   // Send sounds
   for (const sound of result.sounds) {
     post({ type: 'playSound', payload: sound });
@@ -130,8 +135,10 @@ function processTickResult(result: TickResult): void {
   }
 
   // Send key inputs (autoplay visual feedback)
-  for (const ki of result.keyInputs) {
-    post({ type: 'keyInput', payload: ki });
+  if (postKeyInputs) {
+    for (const ki of result.keyInputs) {
+      post({ type: 'keyInput', payload: ki });
+    }
   }
 
   // Send state update
@@ -163,7 +170,7 @@ function gameTick(): void {
   if (!engine) return;
   const currentTime = getCurrentGameTime();
   const result = engine.tick(currentTime);
-  processTickResult(result);
+  processTickResult(result, true);
 }
 
 function startTick(): void {
@@ -245,9 +252,13 @@ function gameTimeForInput(eventEpochMs: number | undefined): number {
   return t;
 }
 
-function handleKeyDown(column: string, time: number): void {
+function handleKeyDown(
+  column: string,
+  time: number,
+  playedKeysound?: { keysound: string; offset: number },
+): void {
   if (!engine) return;
-  const result = engine.handleKeyDown(column, gameTimeForInput(time));
+  const result = engine.handleKeyDown(column, gameTimeForInput(time), playedKeysound);
   processTickResult(result);
 }
 
@@ -279,7 +290,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
       handleStop();
       break;
     case 'keyDown':
-      handleKeyDown(msg.payload.column, msg.payload.time);
+      handleKeyDown(msg.payload.column, msg.payload.time, msg.payload.playedKeysound);
       break;
     case 'keyUp':
       handleKeyUp(msg.payload.column, msg.payload.time);

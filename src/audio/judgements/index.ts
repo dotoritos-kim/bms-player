@@ -312,6 +312,10 @@ export class Notechart {
                 spec.keysoundStart = note.keysoundStart;
                 spec.keysoundEnd = note.keysoundEnd;
                 spec.volume = this._keysounds.getVolume(note.keysound) / 100;
+                // BGM events count toward the chart's end too: otherwise the
+                // run completes (and the result screen shows) before BGM that
+                // follows the last note has even started.
+                this._updateDuration(spec);
                 return spec;
             });
     }

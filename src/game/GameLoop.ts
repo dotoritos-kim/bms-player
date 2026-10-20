@@ -231,6 +231,10 @@ export class GameLoop {
   pause(): void {
     if (this._phase.kind !== 'playing') return;
 
+    // Let go of held keys while still playing so held long notes are judged
+    // as released (the disabled InputHandler would drop their key-ups).
+    this.inputHandler.releaseAll();
+
     this._phase = PHASE_PAUSED;
     this.engine.pause(this.getCurrentTime());
     this.pauseTime = this.getCurrentTime();

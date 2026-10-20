@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { BMSParser, KeySounds, Timing } from '@rhythm-archive/bms-core';
+import { BMSParser, KeySounds, Timing, keysoundKey } from '@rhythm-archive/bms-core';
 import type { BMSNote } from '@rhythm-archive/bms-core';
 import { AudioPreloader, FileMap, resolveKeysoundFiles, type ResolveOptions, type AudioFileMapFetcher } from '../audio';
 import { WorkerAudioScheduler } from '../game/WorkerAudioScheduler';
@@ -249,7 +249,9 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
                 usedKeysounds.add(note.keysound);
                 const filename = keysounds.get(note.keysound);
                 if (filename) {
-                    fileMap[note.keysound] = filename;
+                    // Same key form everywhere (file map, scheduler, playback):
+                    // lower-case for base36, case-preserved for #BASE 62.
+                    fileMap[keysoundKey(note.keysound, keysounds.base62)] = filename;
                 }
             }
         }
@@ -322,9 +324,7 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
                 .filter(n => n.keysound)
                 .map(n => ({
                     sec: timing.beatToSeconds(n.beat),
-                    keysound: keysounds.get(n.keysound)
-                        ? n.keysound.toLowerCase()
-                        : n.keysound.toLowerCase(),
+                    keysound: keysoundKey(n.keysound!, keysounds.base62),
                     offset: 0,
                     volume: volumeRef.current,
                 }));
@@ -411,7 +411,7 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
             if (noteTime <= currentTime + 0.05) { // 50ms buffer
                 if (note.keysound) {
                     // Use playAudioSync (plays immediately without async waiting)
-                    preloader.playAudioSync(note.keysound);
+                    preloader.playAudioSync(keysoundKey(note.keysound, bgmDataRef.current.keysounds.base62));
                 }
                 bgmDataRef.current.currentIndex++;
             } else {
@@ -582,7 +582,7 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
                         const note = notes[i];
                         if (!note.keysound) continue;
                         const noteTime = timing.beatToSeconds(note.beat);
-                        const key = note.keysound.toLowerCase();
+                        const key = keysoundKey(note.keysound, bgmDataRef.current!.keysounds.base62);
                         const duration = preloaderRef.current.getAudioDuration(key);
                         if (duration <= 0) continue;
                         const offset = clampedTime - noteTime;

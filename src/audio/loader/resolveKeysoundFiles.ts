@@ -63,7 +63,9 @@ export function resolveKeysounds(
         const actualFile = serverAudioMap[stem];
 
         if (actualFile) {
-            resolved[id.toLowerCase()] = actualFile;
+            // Keep the id as given: callers pass canonical keys, and #BASE 62
+            // ids are case-sensitive.
+            resolved[id] = actualFile;
         } else {
             unresolved.push(`${id}:${bmsFilename}`);
         }

@@ -191,10 +191,19 @@ export class GaugeSystem {
 
   /**
    * Applies direct damage (for landmine notes).
-   * @param damage Damage amount (0-100%)
+   * @param damage Damage amount (0-100%); a non-finite value (bms-core's
+   *   LANDMINE_INSTANT_GAMEOVER for #WAVZZ) fails the run on every gauge type.
    */
   applyDamage(damage: number): void {
     if (this.failed) return;
+
+    // ZZ landmine: forced STAGE FAILED, bypassing the GROOVE/EASY 2% floor
+    if (damage === Number.POSITIVE_INFINITY) {
+      this.lastDelta = -this.value;
+      this.value = 0;
+      this.failed = true;
+      return;
+    }
 
     this.value = Math.max(this.config.minValue, this.value - damage);
     this.lastDelta = -damage;

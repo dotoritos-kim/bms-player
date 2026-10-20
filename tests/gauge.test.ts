@@ -295,6 +295,25 @@ describe('GaugeSystem', () => {
       gauge.applyDamage(50); // should be ignored
       expect(gauge.getValue()).toBe(0);
     });
+
+    // #WAVZZ landmine: bms-core signals it as a non-finite damage (LANDMINE_INSTANT_GAMEOVER)
+    it.each<GaugeType>(['groove', 'easy', 'assist-easy', 'hard', 'exhard'])(
+      'instant game-over damage fails the %s gauge',
+      (type) => {
+        const gauge = new GaugeSystem(type, TOTAL, NOTE_COUNT);
+        gauge.applyDamage(Number.POSITIVE_INFINITY);
+        expect(gauge.isFailed()).toBe(true);
+        expect(gauge.getValue()).toBe(0);
+        expect(gauge.isCleared()).toBe(false);
+      },
+    );
+
+    it('large finite damage on groove still stops at the 2% floor', () => {
+      const gauge = new GaugeSystem('groove', TOTAL, NOTE_COUNT);
+      gauge.applyDamage(100);
+      expect(gauge.getValue()).toBe(2);
+      expect(gauge.isFailed()).toBe(false);
+    });
   });
 
   // ── TOTAL parameter ───────────────────────────────────────────────

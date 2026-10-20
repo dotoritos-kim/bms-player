@@ -131,7 +131,16 @@ export class InputHandler {
   };
 
   private handleBlur = (): void => {
-    // Release all held keys
+    this.releaseAll();
+  };
+
+  /**
+   * Releases every held key, firing the key-up callback for each (as if the
+   * keys were let go). Call before disabling input mid-song (pause):
+   * `setEnabled(false)` forgets held keys silently, so a long note held into
+   * the pause would otherwise stay "held" in the engine and the UI.
+   */
+  releaseAll(): void {
     const time = performance.now();
     for (const column of this.heldKeys) {
       const input: KeyInput = { column, time, type: 'up' };
@@ -139,7 +148,7 @@ export class InputHandler {
       this.onKeyUpCallback?.(input);
     }
     this.heldKeys.clear();
-  };
+  }
 
   /**
    * Returns all pending inputs and clears the queue.

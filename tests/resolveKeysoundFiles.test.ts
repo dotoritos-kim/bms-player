@@ -113,13 +113,12 @@ describe('resolveKeysounds', () => {
     expect(unresolved).toHaveLength(0);
   });
 
-  it('should lowercase keysound IDs in resolved output', () => {
-    const keysoundMap = { 'AB': 'kick.wav' };
+  it('keeps keysound IDs as given (#BASE 62 ids are case-sensitive)', () => {
+    const keysoundMap = { 'AB': 'kick.wav', 'ab': 'kick.wav' };
 
     const { resolved } = resolveKeysounds(keysoundMap, serverAudioMap);
 
-    expect(resolved).toHaveProperty('ab');
-    expect(resolved).not.toHaveProperty('AB');
+    expect(resolved['AB']).toBe('kick.ogg');
     expect(resolved['ab']).toBe('kick.ogg');
   });
 });

@@ -65,6 +65,9 @@ export class WorkerGameLoop {
   // NextNotes cache for 0ms keysound playback
   private nextNotesCache: Map<string, NextNotePayload> = new Map();
 
+  // setTimeout handles for autoplay key-release simulation (mirrors GameLoop)
+  private autoplayReleaseTimers: ReturnType<typeof setTimeout>[] = [];
+
   // Timing for getCurrentTime() on Main Thread
   private contextStartTime: number = 0;
   private pauseTime: number = 0;
@@ -178,6 +181,9 @@ export class WorkerGameLoop {
 
   pause(): void {
     if (this._phase.kind !== 'playing') return;
+    // Let go of held keys while still playing so the worker judges held long
+    // notes as released (the disabled InputHandler would drop their key-ups).
+    this.inputHandler.releaseAll();
     this._phase = PHASE_PAUSED;
     this.pauseTime = this.getCurrentTime();
     this.inputHandler.setEnabled(false);
@@ -202,6 +208,7 @@ export class WorkerGameLoop {
     this._phase = PHASE_READY;
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
+    this.clearAutoplayTimers();
     this.postToWorker({ type: 'stop' });
     if (wasActive) this.emitPhaseState();
   }
@@ -289,16 +296,21 @@ export class WorkerGameLoop {
 
     // 0ms keysound: play from nextNotes cache immediately
     const nextNote = this.nextNotesCache.get(column);
-    if (nextNote) {
+    const playedKeysound = nextNote?.keysound
+      ? { keysound: nextNote.keysound, offset: nextNote.offset }
+      : undefined;
+    if (nextNote && playedKeysound) {
       this.keysoundPlayer.play(nextNote.keysound, nextNote.offset, 0, nextNote.volume);
     }
 
     // Forward to Worker for judgment (async)
     // Absolute (epoch) timestamp: worker and window have different
     // performance.now() origins, so the worker converts this to game time.
+    // playedKeysound lets the worker skip its own hit sound when it judges
+    // the same note; a different judged note (or no cache entry) still sounds.
     this.postToWorker({
       type: 'keyDown',
-      payload: { column, time: performance.timeOrigin + performance.now() },
+      payload: { column, time: performance.timeOrigin + performance.now(), playedKeysound },
     });
   };
 
@@ -363,9 +375,19 @@ export class WorkerGameLoop {
         this.callbacks.onLandmineTrigger?.(msg.payload);
         break;
 
-      case 'keyInput':
-        // Autoplay visual feedback - already handled by callbacks in tick
+      case 'keyInput': {
+        // Autoplay presses (the worker only forwards tick-generated inputs).
+        // Same visual feedback as GameLoop: press, then release shortly after.
+        const { column, held } = msg.payload;
+        this.callbacks.onKeyInput?.(column, held);
+        if (held) {
+          const timer = setTimeout(() => {
+            this.callbacks.onKeyInput?.(column, false);
+          }, 50);
+          this.autoplayReleaseTimers.push(timer);
+        }
         break;
+      }
 
       case 'nextNotes':
         this.nextNotesCache.clear();
@@ -377,12 +399,14 @@ export class WorkerGameLoop {
       case 'complete':
         this._phase = PHASE_COMPLETED;
         this.inputHandler.setEnabled(false);
+        this.clearAutoplayTimers();
         this.callbacks.onComplete?.(msg.payload);
         break;
 
       case 'failed':
         this._phase = PHASE_FAILED;
         this.inputHandler.setEnabled(false);
+        this.clearAutoplayTimers();
         this.keysoundPlayer.stopAll();
         this.callbacks.onFailed?.(msg.payload);
         break;
@@ -392,6 +416,11 @@ export class WorkerGameLoop {
         break;
     }
   };
+
+  private clearAutoplayTimers(): void {
+    for (const t of this.autoplayReleaseTimers) clearTimeout(t);
+    this.autoplayReleaseTimers = [];
+  }
 
   private deserializeState(serialized: SerializedGameState): GameLoopState {
     return {

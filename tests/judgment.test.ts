@@ -106,28 +106,37 @@ describe('JudgmentEngine', () => {
   // ── DEFEXRANK custom windows ──────────────────────────────────────
 
   describe('DEFEXRANK', () => {
-    it('should scale windows with DEFEXRANK (100 = 16ms pgreat)', () => {
+    it('should match RANK 2 windows at DEFEXRANK 100 (NORMAL)', () => {
       const engine = new JudgmentEngine({ defexrank: 100 });
       const windows = engine.getWindows();
-      expect(windows.pgreat).toBeCloseTo(16, 1);
-      expect(windows.great).toBeCloseTo(32, 1);
-      expect(windows.good).toBeCloseTo(64, 1);
+      expect(windows.pgreat).toBeCloseTo(18, 1);
+      expect(windows.great).toBeCloseTo(40, 1);
+      expect(windows.good).toBeCloseTo(100, 1);
       expect(windows.bad).toBe(200);
     });
 
-    it('should scale down with small DEFEXRANK (50 = 8ms pgreat)', () => {
+    it('should scale the RANK 2 windows of the active style (beatoraja, 100 = NORMAL)', () => {
+      const engine = new JudgmentEngine({ defexrank: 100, style: 'beatoraja' });
+      const windows = engine.getWindows();
+      expect(windows.pgreat).toBeCloseTo(15, 1);
+      expect(windows.great).toBeCloseTo(45, 1);
+      expect(windows.good).toBeCloseTo(112, 1);
+      expect(windows.bad).toBe(200);
+    });
+
+    it('should scale down with small DEFEXRANK (50 = half of NORMAL)', () => {
       const engine = new JudgmentEngine({ defexrank: 50 });
       const windows = engine.getWindows();
-      expect(windows.pgreat).toBeCloseTo(8, 1);
-      expect(windows.great).toBeCloseTo(16, 1);
-      expect(windows.good).toBeCloseTo(32, 1);
+      expect(windows.pgreat).toBeCloseTo(9, 1);
+      expect(windows.great).toBeCloseTo(20, 1);
+      expect(windows.good).toBeCloseTo(50, 1);
     });
 
     it('should override rank when defexrank is set', () => {
       const engine = new JudgmentEngine({ rank: 0, defexrank: 200 });
       const windows = engine.getWindows();
-      // DEFEXRANK takes priority: 200 * 0.16 = 32ms pgreat
-      expect(windows.pgreat).toBeCloseTo(32, 1);
+      // DEFEXRANK takes priority: RANK 2 LR2 pgreat 18ms * 200/100 = 36ms
+      expect(windows.pgreat).toBeCloseTo(36, 1);
     });
   });
 

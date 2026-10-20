@@ -29,7 +29,19 @@ export type MainToWorkerMessage =
   | { type: 'pause' }
   | { type: 'resume' }
   | { type: 'stop' }
-  | { type: 'keyDown'; payload: { column: KeyColumn; time: number } }
+  /**
+   * `playedKeysound`: the keysound the main thread already played for this
+   * press from the nextNotes cache. The worker skips its hit sound only when
+   * the judged note has this same sound.
+   */
+  | {
+      type: 'keyDown';
+      payload: {
+        column: KeyColumn;
+        time: number;
+        playedKeysound?: { keysound: string; offset: number };
+      };
+    }
   | { type: 'keyUp'; payload: { column: KeyColumn; time: number } }
   | { type: 'dispose' };
 

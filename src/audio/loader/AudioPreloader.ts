@@ -28,6 +28,7 @@ import { AudioDecoder } from '../pipeline/AudioDecoder';
 import { EffectChain } from '../pipeline/EffectChain';
 import { WorkletPlayback } from '../pipeline/WorkletPlayback';
 import type { PlayOptions } from '../pipeline/WorkletPlayback';
+import { isUploadedBuffer } from '../pipeline/UploadedBuffer';
 import { AudioFetchPipeline } from '../pipeline/AudioFetchPipeline';
 
 // ---- Public re-exports (backward compatibility) ----
@@ -47,6 +48,12 @@ export interface AudioPreloaderOptions {
     useIndexedDBCache?: boolean;
     /** AudioContext latencyHint. */
     latencyHint?: AudioContextLatencyCategory | number;
+    /**
+     * Free main-thread PCM after it has been uploaded to the AudioWorklet
+     * (default false). Halves memory for keysound-heavy charts; waveform data
+     * then comes from a compact peak envelope. Requires useCache: false.
+     */
+    releaseAfterUpload?: boolean;
 }
 
 export type WorkerFactory = () => Worker;
@@ -89,7 +96,10 @@ export class AudioPreloader {
             () => this.aborted,
         );
         this.effects = new EffectChain(this.audioContext, options?.simplifiedEffects ?? false);
-        this.playback = new WorkletPlayback(this.audioContext, this.store, this.effects);
+        this.playback = new WorkletPlayback(
+            this.audioContext, this.store, this.effects,
+            (options?.releaseAfterUpload ?? false) && !useCache,
+        );
 
         this.fetchPipeline = new AudioFetchPipeline(
             baseUrl,
@@ -219,11 +229,24 @@ export class AudioPreloader {
     public getWaveformData(key: string, samplesPerBeat = 32, bpm = 130): Float32Array | null {
         const buffer = this.store.get(key);
         if (!buffer) return null;
-        const channelData = buffer.getChannelData(0);
         const durationSec = buffer.duration;
         const durationBeats = (durationSec * bpm) / 60;
         const totalSamples = Math.ceil(durationBeats * samplesPerBeat);
         if (totalSamples <= 0) return null;
+        if (isUploadedBuffer(buffer)) {
+            // Samples live in the worklet: resample the kept peak envelope.
+            const peaks = buffer.peaks;
+            const out = new Float32Array(totalSamples);
+            for (let i = 0; i < totalSamples; i++) {
+                const start = Math.floor((i * peaks.length) / totalSamples);
+                const end = Math.max(start + 1, Math.floor(((i + 1) * peaks.length) / totalSamples));
+                let max = 0;
+                for (let j = start; j < end && j < peaks.length; j++) if (peaks[j] > max) max = peaks[j];
+                out[i] = max;
+            }
+            return out;
+        }
+        const channelData = buffer.getChannelData(0);
         const result = new Float32Array(totalSamples);
         const samplesPerChunk = Math.floor(channelData.length / totalSamples);
         for (let i = 0; i < totalSamples; i++) {

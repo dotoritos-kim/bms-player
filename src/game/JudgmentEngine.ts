@@ -55,6 +55,16 @@ export interface JudgmentEngineConfig {
   exrankMode?: boolean;      // All or Nothing mode
 }
 
+/** Base windows for a #RANK under the given style (IIDX ignores rank). */
+function baseWindows(rank: number, style: JudgmentStyle): JudgmentWindows {
+  if (style === 'iidx') return { ...IIDX_JUDGMENT_WINDOWS };
+  if (style === 'beatoraja') {
+    return { ...(BEATORAJA_JUDGMENT_WINDOWS[rank] ?? BEATORAJA_JUDGMENT_WINDOWS[2]) };
+  }
+  // LR2 style (default)
+  return { ...(LR2_JUDGMENT_WINDOWS[rank] ?? LR2_JUDGMENT_WINDOWS[2]) };
+}
+
 export class JudgmentEngine {
   private windows: JudgmentWindows;
   private exrankMode: boolean = false;
@@ -65,22 +75,18 @@ export class JudgmentEngine {
     this.exrankMode = exrankMode;
 
     if (defexrank !== undefined) {
-      // Custom judgment based on #DEFEXRANK
-      // At #DEFEXRANK 100, PGREAT = ±16ms; ±1 = ±0.16ms
-      const pgreatMs = defexrank * 0.16;
+      // #DEFEXRANK (percent, 100 = NORMAL) scales the RANK 2 windows of the
+      // active style and overrides #RANK. Bad window stays at its base value.
+      const base = baseWindows(2, style);
+      const scale = defexrank / 100;
       this.windows = {
-        pgreat: pgreatMs,
-        great: pgreatMs * 2,
-        good: pgreatMs * 4,
-        bad: 200,
+        pgreat: base.pgreat * scale,
+        great: base.great * scale,
+        good: base.good * scale,
+        bad: base.bad,
       };
-    } else if (style === 'iidx') {
-      this.windows = { ...IIDX_JUDGMENT_WINDOWS };
-    } else if (style === 'beatoraja') {
-      this.windows = { ...(BEATORAJA_JUDGMENT_WINDOWS[rank] ?? BEATORAJA_JUDGMENT_WINDOWS[2]) };
     } else {
-      // LR2 style (default)
-      this.windows = { ...(LR2_JUDGMENT_WINDOWS[rank] ?? LR2_JUDGMENT_WINDOWS[2]) };
+      this.windows = baseWindows(rank, style);
     }
   }
 

@@ -141,6 +141,8 @@ export class GameEngine {
   private pendingNotes: GameNote[];
   private pendingLandmines: GameNote[];
   private activeHolds: Map<string, GameNote>; // KeyColumn → GameNote
+  /** Pending notes whose keysound the caller already played on an empty press */
+  private prePlayedNotes: Set<GameNote> = new Set();
   private autoIndex: number = 0;
   private sortedAutos: SoundedEvent[];
 
@@ -204,7 +206,11 @@ export class GameEngine {
     }, 0));
 
     // Gauge
-    const total = Math.max(100, config.total ?? 200);
+    // #TOTAL below 100 is a legitimate (harsh) chart setting and is used as-is;
+    // only missing / non-positive / non-finite values fall back to the default.
+    const total = config.total !== undefined && Number.isFinite(config.total) && config.total > 0
+      ? config.total
+      : 200;
     this.gauge = new GaugeSystem(
       config.gaugeType ?? 'groove',
       total,
@@ -342,8 +348,16 @@ export class GameEngine {
 
   /**
    * Handle key down. Returns commands for sound and judgment.
+   * @param playedKeysound The keysound the caller already played for this press
+   *   (WorkerGameLoop's 0ms nextNotes cache). The hit sound is skipped only when
+   *   the judged note has that same sound; a different judged note (e.g. the
+   *   cached note is still inside its miss window) still sounds.
    */
-  handleKeyDown(column: KeyColumn, currentTime: number): TickResult {
+  handleKeyDown(
+    column: KeyColumn,
+    currentTime: number,
+    playedKeysound?: { keysound: string; offset: number },
+  ): TickResult {
     const result: TickResult = {
       sounds: [],
       judgments: [],
@@ -362,6 +376,8 @@ export class GameEngine {
     // Find closest note
     const noteIndex = this.findClosestNote(column, currentTime);
     if (noteIndex === -1) {
+      // Empty press: the caller's pre-played sound belongs to a pending note.
+      this.markPrePlayed(column, playedKeysound);
       this.checkLandmine(column, currentTime, result);
       return result;
     }
@@ -376,7 +392,11 @@ export class GameEngine {
     this.pendingNotes.splice(noteIndex, 1);
 
     // Keysound
-    if (note.keysound) {
+    const alreadyPlayed =
+      playedKeysound !== undefined &&
+      playedKeysound.keysound === note.keysound &&
+      playedKeysound.offset === (note.keysoundStart ?? 0);
+    if (note.keysound && !alreadyPlayed) {
       result.sounds.push({
         type: 'playSound',
         keysound: note.keysound,
@@ -384,7 +404,10 @@ export class GameEngine {
         gameTimeMs: 0, // immediate
         volume: note.volume ?? 1,
       });
+      // The caller's pre-played sound was for a different (still pending) note.
+      this.markPrePlayed(column, playedKeysound);
     }
+    this.prePlayedNotes.delete(note);
 
     // Long note
     if (note.end) {
@@ -441,6 +464,26 @@ export class GameEngine {
     return this.heldKeys.has(column);
   }
 
+  /**
+   * Remembers that the caller already played the sound of the column's next
+   * pending note (WorkerGameLoop nextNotes cache on a press that did not judge
+   * that note), so the note's MISS does not sound it a second time.
+   */
+  private markPrePlayed(
+    column: KeyColumn,
+    playedKeysound: { keysound: string; offset: number } | undefined,
+  ): void {
+    if (!playedKeysound) return;
+    const pending = this.pendingNotes.find((n) => n.column === column);
+    if (
+      pending &&
+      pending.keysound === playedKeysound.keysound &&
+      (pending.keysoundStart ?? 0) === playedKeysound.offset
+    ) {
+      this.prePlayedNotes.add(pending);
+    }
+  }
+
   // ==================== Next Notes Cache ====================
 
   /**
@@ -451,8 +494,10 @@ export class GameEngine {
     for (const note of this.pendingNotes) {
       const col = note.column;
       if (seen.has(col)) continue;
+      // Only the column's *next* note counts: a silent next note must not
+      // borrow the keysound of a later note in the same column.
+      seen.add(col);
       if (note.keysound) {
-        seen.add(col);
         result.nextNotes.set(col, {
           keysound: note.keysound,
           offset: note.keysoundStart ?? 0,
@@ -527,7 +572,9 @@ export class GameEngine {
       }
 
       this.pendingNotes.shift();
-      if (note.keysound) {
+      // Skip the MISS sound when an earlier empty press already played it.
+      const prePlayed = this.prePlayedNotes.delete(note);
+      if (note.keysound && !prePlayed) {
         result.sounds.push({
           type: 'playSound',
           keysound: note.keysound,
@@ -553,6 +600,16 @@ export class GameEngine {
       if (!this._autoplay && !this.heldKeys.has(column)) {
         this.activeHolds.delete(column);
         this.onNoteJudgment(note, 'POOR', 0, currentTime, result);
+        continue;
+      }
+
+      // Autoplay releases exactly on the tail (PGREAT, like its heads)
+      // instead of waiting out the release window for a GREAT.
+      if (this._autoplay) {
+        if (currentTime >= note.end.time * 1000) {
+          this.activeHolds.delete(column);
+          this.onNoteJudgment(note, 'PGREAT', 0, currentTime, result);
+        }
         continue;
       }
 
@@ -617,8 +674,9 @@ export class GameEngine {
 
       if (distance <= mineWindow) {
         this.pendingLandmines.splice(i, 1);
-        // Chart-defined damage (#xxxD1 value), falling back to the historical 5%.
-        const damage = typeof mine.damage === 'number' && mine.damage > 0 ? mine.damage : 5;
+        // Chart-defined damage (#xxxD1 value; 0 is a harmless mine per spec).
+        // The historical 5% applies only to notecharts that carry no damage at all.
+        const damage = typeof mine.damage === 'number' && !Number.isNaN(mine.damage) ? mine.damage : 5;
         this.gauge.applyDamage(damage);
 
         result.landmines.push({

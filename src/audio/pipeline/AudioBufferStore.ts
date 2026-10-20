@@ -54,6 +54,14 @@ export class AudioBufferStore {
         }
     }
 
+    /**
+     * Replaces the local entry only (the global cache keeps whatever it had):
+     * used to swap a decoded buffer for its uploaded stand-in.
+     */
+    replaceLocal(key: string, buffer: AudioBuffer): void {
+        this.localBuffers.set(key, buffer);
+    }
+
     /** Looks up a buffer. Local first, then the global cache. */
     get(key: string): AudioBuffer | undefined {
         const local = this.localBuffers.get(key);
