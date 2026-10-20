@@ -69,9 +69,12 @@ export class AudioBufferStore {
         return undefined;
     }
 
+    /**
+     * A global-cache hit is promoted to the local map, so the buffer survives a
+     * later LRU eviction (callers skip decoding when this returns true).
+     */
     has(key: string): boolean {
-        return this.localBuffers.has(key) ||
-            (this.useGlobalCache && getFromGlobalCache(this.globalKey(key)) !== undefined);
+        return this.get(key) !== undefined;
     }
 
     size(): number {

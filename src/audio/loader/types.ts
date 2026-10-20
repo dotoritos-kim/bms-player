@@ -38,6 +38,31 @@ export interface StereoPlayData {
     scheduledTime?: number;
     /** Volume (0-1). */
     volume?: number;
+    /** Voices sharing a choke group cut each other when a newer one starts. */
+    chokeGroup?: string;
+    /** When the play arrives after scheduledTime, skip the elapsed part. */
+    catchUp?: boolean;
+}
+
+/**
+ * Playback payload referencing sample data registered with 'register'.
+ */
+export interface KeyedPlayData {
+    bufferKey: string;
+    loop: boolean;
+    offset?: number;
+    scheduledTime?: number;
+    volume?: number;
+    chokeGroup?: string;
+    catchUp?: boolean;
+}
+
+/**
+ * Sample-data registration payload ('register'). Right is omitted for mono.
+ */
+export interface RegisterBufferData {
+    bufferLeft: Float32Array;
+    bufferRight?: Float32Array;
 }
 
 /**
@@ -65,7 +90,10 @@ export type AudioProcessorMessageType =
     | 'clearAll'
     | 'setVolume'
     | 'adjustVolume'
-    | 'setPlaybackRate';
+    | 'setPlaybackRate'
+    | 'register'
+    | 'unregister'
+    | 'unregisterAll';
 
 /**
  * Envelope for messages posted into the AudioWorklet.
@@ -77,7 +105,9 @@ export interface AudioProcessorPostMessage {
         | null // 'stop' | 'clear' | 'stopAll' | 'clearAll'
         | number // 'setVolume' | 'adjustVolume'
         | StereoPlayData
-        | MonoPlayData;
+        | MonoPlayData
+        | KeyedPlayData
+        | RegisterBufferData;
 }
 
 /**

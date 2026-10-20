@@ -10,6 +10,8 @@ import type { AudioBufferStore } from './AudioBufferStore';
 
 export class AudioDecoder {
     private decodedCount = 0;
+    /** Decodes in flight per key (progressive + batch share them). */
+    private readonly inFlight = new Map<string, Promise<void>>();
 
     constructor(
         private readonly audioContext: AudioContext,
@@ -32,66 +34,55 @@ export class AudioDecoder {
 
     /**
      * Decodes a single key.
-     * Returns immediately when already in the store or aborted.
+     * Returns immediately when already in the store or aborted; joins the
+     * in-flight decode when one is already running for the key.
      */
-    async decodeOne(key: string, arrayBuffer: ArrayBuffer): Promise<void> {
-        if (this.getAborted()) return;
-        if (this.store.has(key)) return;
+    decodeOne(key: string, arrayBuffer: ArrayBuffer): Promise<void> {
+        if (this.getAborted()) return Promise.resolve();
+        const pending = this.inFlight.get(key);
+        if (pending) return pending;
+        if (this.store.has(key)) return Promise.resolve();
 
-        // Handle detached ArrayBuffers.
+        // A detached ArrayBuffer here means nobody is decoding it any more.
         if (arrayBuffer.byteLength === 0) {
             this.store.set(key, this.createSilent());
             this.decodedCount++;
-            return;
+            return Promise.resolve();
         }
 
-        try {
-            const audioBuf = await this.audioContext.decodeAudioData(arrayBuffer);
-            if (this.getAborted()) return;
-            this.store.set(key, audioBuf);
-            this.decodedCount++;
-        } catch (err: unknown) {
-            if (this.getAborted()) return;
-            console.error(`[AudioDecoder] decodeOne fail key=${key}`, err);
-            this.store.set(key, this.createSilent());
-            this.decodedCount++;
-        }
+        const p = this.audioContext
+            .decodeAudioData(arrayBuffer)
+            .then((audioBuf) => {
+                if (this.getAborted()) return;
+                this.store.set(key, audioBuf);
+                this.decodedCount++;
+            })
+            .catch((err: unknown) => {
+                if (this.getAborted()) return;
+                console.error(`[AudioDecoder] decode fail key=${key}`, err);
+                this.store.set(key, this.createSilent());
+                this.decodedCount++;
+            })
+            .finally(() => {
+                this.inFlight.delete(key);
+            });
+        this.inFlight.set(key, p);
+        return p;
     }
 
     /**
      * Batch decoding. Races against the abort promise so it can be interrupted.
+     * Waits for progressive decodes already running for the same keys instead of
+     * treating their (detached) ArrayBuffers as empty files.
      */
     async decodeAll(
         entries: Iterable<[string, ArrayBuffer]>,
         abortPromise: Promise<void>,
     ): Promise<void> {
         const promises: Promise<void>[] = [];
-
         for (const [key, arrayBuf] of entries) {
-            if (this.store.has(key)) continue;
-
-            if (arrayBuf.byteLength === 0) {
-                this.store.set(key, this.createSilent());
-                this.decodedCount++;
-                continue;
-            }
-
-            const p = this.audioContext
-                .decodeAudioData(arrayBuf)
-                .then((audioBuf) => {
-                    if (this.getAborted()) return;
-                    this.store.set(key, audioBuf);
-                    this.decodedCount++;
-                })
-                .catch((err: unknown) => {
-                    if (this.getAborted()) return;
-                    console.error(`[AudioDecoder] decodeAll fail key=${key}`, err);
-                    this.store.set(key, this.createSilent());
-                    this.decodedCount++;
-                });
-            promises.push(p);
+            promises.push(this.decodeOne(key, arrayBuf));
         }
-
         await Promise.race([Promise.all(promises), abortPromise]);
     }
 

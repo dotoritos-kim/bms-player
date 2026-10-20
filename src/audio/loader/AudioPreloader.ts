@@ -27,12 +27,14 @@ import { AudioBufferStore } from '../pipeline/AudioBufferStore';
 import { AudioDecoder } from '../pipeline/AudioDecoder';
 import { EffectChain } from '../pipeline/EffectChain';
 import { WorkletPlayback } from '../pipeline/WorkletPlayback';
+import type { PlayOptions } from '../pipeline/WorkletPlayback';
 import { AudioFetchPipeline } from '../pipeline/AudioFetchPipeline';
 
 // ---- Public re-exports (backward compatibility) ----
 export type { FileMap } from './messages';
 export { EQ_FREQUENCIES, EQ_PRESETS } from '../pipeline/EffectChain';
 export type { EffectSettings } from '../pipeline/EffectChain';
+export type { PlayOptions } from '../pipeline/WorkletPlayback';
 
 export interface AudioPreloaderOptions {
     /** Decode files progressively while they download (default: true). */
@@ -182,8 +184,18 @@ export class AudioPreloader {
         offset = 0,
         scheduledTime = 0,
         volume = 1,
+        options?: PlayOptions,
     ): string | null {
-        return this.playback.playAudioSync(key, loop, uniquePlay, offset, scheduledTime, volume);
+        return this.playback.playAudioSync(key, loop, uniquePlay, offset, scheduledTime, volume, options);
+    }
+
+    /**
+     * Uploads all decoded buffers to the AudioWorklet in the background so the
+     * first play of each keysound does not stall the main thread. Call after
+     * `initAudioWorklet()`.
+     */
+    public primeWorklet(): Promise<void> {
+        return this.playback.prime(Array.from(this.store.keys()));
     }
 
     public stopAudio(trackId: string): void { this.playback.stopAudio(trackId); }

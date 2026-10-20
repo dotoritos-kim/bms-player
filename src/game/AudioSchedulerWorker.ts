@@ -19,6 +19,8 @@ export type SchedulerMainToWorker =
 
 export interface SchedulerInitPayload {
   notes: SchedulerNote[];
+  /** Chart time at which playback ends (default: last note + 2 s). */
+  endSec?: number;
 }
 
 export interface SchedulerNote {
@@ -29,7 +31,7 @@ export interface SchedulerNote {
 }
 
 export type SchedulerWorkerToMain =
-  | { type: 'playSound'; payload: { keysound: string; offset: number; delaySec: number; volume: number } }
+  | { type: 'playSound'; payload: { keysound: string; offset: number; delaySec: number; volume: number; sec: number } }
   | { type: 'tick'; payload: { currentSec: number } }
   | { type: 'ended' }
   | { type: 'ready' };
@@ -44,7 +46,10 @@ let startSec: number = 0;       // game time offset in seconds
 let speed: number = 1;
 let tickInterval: ReturnType<typeof setInterval> | null = null;
 let lastUiTick: number = 0;
-const LOOKAHEAD = 0.100; // 100ms lookahead
+let endSec: number | null = null;
+// The main thread converts note times to AudioContext time itself, so the
+// lookahead only has to cover message latency / main-thread stalls.
+const LOOKAHEAD = 0.250;
 const UI_UPDATE_INTERVAL = 50; // ms between UI tick updates
 
 function post(msg: SchedulerWorkerToMain): void {
@@ -76,6 +81,7 @@ function scheduleTick(): void {
         offset: note.offset,
         delaySec: Math.max(0, delaySec),
         volume: note.volume,
+        sec: note.sec,
       },
     });
     currentIndex++;
@@ -91,7 +97,8 @@ function scheduleTick(): void {
   // Check if all notes played and we're past the last note
   if (currentIndex >= notes.length) {
     const lastNote = notes[notes.length - 1];
-    if (lastNote && currentSec > lastNote.sec + 2) {
+    const end = endSec ?? (lastNote ? lastNote.sec + 2 : null);
+    if (end !== null && currentSec > end) {
       post({ type: 'ended' });
       stopTick();
       isPlaying = false;
@@ -132,6 +139,7 @@ self.onmessage = (e: MessageEvent<SchedulerMainToWorker>) => {
   switch (msg.type) {
     case 'init':
       notes = msg.payload.notes.slice().sort((a, b) => a.sec - b.sec);
+      endSec = typeof msg.payload.endSec === 'number' ? msg.payload.endSec : null;
       currentIndex = 0;
       isPlaying = false;
       post({ type: 'ready' });

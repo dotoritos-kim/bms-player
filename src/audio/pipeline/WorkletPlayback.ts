@@ -11,9 +11,18 @@ import type { AudioProcessorPostMessage } from '../loader/types';
 import type { AudioBufferStore } from './AudioBufferStore';
 import type { EffectChain, EffectSettings } from './EffectChain';
 
+export interface PlayOptions {
+    /** Voices sharing a choke group cut each other (BMS: re-triggering a WAV slot restarts it). */
+    chokeGroup?: string;
+    /** When the play arrives after `scheduledTime`, skip the elapsed part instead of starting late. */
+    catchUp?: boolean;
+}
+
 export class WorkletPlayback {
     private audioWorkletNode: AudioWorkletNode | null = null;
     private trackIdCounter = 0;
+    /** Buffer currently registered in the worklet per key. */
+    private readonly registered = new Map<string, AudioBuffer>();
 
     constructor(
         private readonly ctx: AudioContext,
@@ -29,12 +38,7 @@ export class WorkletPlayback {
         // Pass the source (worklet) to the EffectChain to build the nodes.
         this.effects.build(this.audioWorkletNode, effectSettings);
 
-        this.audioWorkletNode.port.onmessage = (event) => {
-            const { type, key, data } = event.data;
-            if (type === 'latencyReport') {
-                console.log(`[Latency Report] Track=${key}, Latency=${data?.latency ?? 'Unknown'}`);
-            }
-        };
+        this.registered.clear();
     }
 
     get isReady(): boolean {
@@ -62,14 +66,7 @@ export class WorkletPlayback {
 
         if (this.ctx.state === 'suspended') await this.ctx.resume();
 
-        const { trackId, leftData, rightData, transferList } =
-            this._preparePlayData(key, audioBuffer, uniquePlay);
-
-        this._post<AudioProcessorPostMessage>(
-            { type: 'play', key: trackId, data: { bufferLeft: leftData, bufferRight: rightData, loop, offset } },
-            { transfer: transferList },
-        );
-        return trackId;
+        return this._play(key, audioBuffer, loop, uniquePlay, offset, 0, 1);
     }
 
     // ---- Playback (sync, legacy compatible) ----
@@ -81,6 +78,7 @@ export class WorkletPlayback {
         offset = 0,
         scheduledTime = 0,
         volume = 1,
+        options?: PlayOptions,
     ): string | null {
         if (!this.audioWorkletNode) {
             console.warn('[WorkletPlayback] playAudioSync: AudioWorkletNode not initialized');
@@ -92,29 +90,71 @@ export class WorkletPlayback {
 
         if (this.ctx.state === 'suspended') void this.ctx.resume();
 
-        const { trackId, leftData, rightData, transferList } =
-            this._preparePlayData(key, audioBuffer, uniquePlay);
+        return this._play(key, audioBuffer, loop, uniquePlay, offset, scheduledTime, volume, options);
+    }
 
-        this._post<AudioProcessorPostMessage>(
-            { type: 'play', key: trackId, data: { bufferLeft: leftData, bufferRight: rightData, loop, offset, scheduledTime, volume } },
-            { transfer: transferList },
-        );
+    /**
+     * Uploads every decoded buffer to the worklet ahead of playback, yielding
+     * between chunks so the UI stays responsive. Without this, the first play
+     * of each key pays the copy cost on the spot.
+     */
+    async prime(keys: Iterable<string>, chunkBytes = 16 * 1024 * 1024): Promise<void> {
+        let sent = 0;
+        for (const key of keys) {
+            if (!this.audioWorkletNode) return;
+            const buffer = this.store.get(key);
+            if (!buffer || this.registered.get(key) === buffer) continue;
+            this._ensureRegistered(key, buffer);
+            sent += buffer.length * buffer.numberOfChannels * 4;
+            if (sent >= chunkBytes) {
+                sent = 0;
+                await new Promise<void>((r) => setTimeout(r, 0));
+            }
+        }
+    }
+
+    private _play(
+        key: string,
+        audioBuffer: AudioBuffer,
+        loop: boolean,
+        uniquePlay: boolean,
+        offset: number,
+        scheduledTime: number,
+        volume: number,
+        options?: PlayOptions,
+    ): string {
+        this._ensureRegistered(key, audioBuffer);
+        const trackId = uniquePlay ? `${key}_${this.trackIdCounter++}` : key;
+        this._post<AudioProcessorPostMessage>({
+            type: 'play',
+            key: trackId,
+            data: {
+                bufferKey: key,
+                loop,
+                offset,
+                scheduledTime,
+                volume,
+                chokeGroup: options?.chokeGroup,
+                catchUp: options?.catchUp,
+            },
+        });
         return trackId;
     }
 
-    private _preparePlayData(
-        key: string,
-        audioBuffer: AudioBuffer,
-        uniquePlay: boolean,
-    ): { trackId: string; leftData: Float32Array; rightData: Float32Array; transferList: ArrayBuffer[]; isStereo: boolean } {
-        const leftData = audioBuffer.getChannelData(0).slice(0);
-        const isStereo = audioBuffer.numberOfChannels > 1;
-        const rightData = isStereo ? audioBuffer.getChannelData(1).slice(0) : leftData;
-        const trackId = uniquePlay ? `${key}_${this.trackIdCounter++}` : key;
-        const transferList: ArrayBuffer[] = isStereo
-            ? [leftData.buffer, rightData.buffer]
-            : [leftData.buffer];
-        return { trackId, leftData, rightData, transferList, isStereo };
+    /**
+     * Sends the sample data for `key` to the worklet once. Re-sends when the
+     * store holds a different buffer for the key (e.g. a silent placeholder
+     * later replaced by the real decode).
+     */
+    private _ensureRegistered(key: string, audioBuffer: AudioBuffer): void {
+        if (this.registered.get(key) === audioBuffer) return;
+        const left = audioBuffer.getChannelData(0).slice(0);
+        const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1).slice(0) : undefined;
+        this._post<AudioProcessorPostMessage>(
+            { type: 'register', key, data: { bufferLeft: left, bufferRight: right } },
+            { transfer: right ? [left.buffer, right.buffer] : [left.buffer] },
+        );
+        this.registered.set(key, audioBuffer);
     }
 
     // ---- Control ----
@@ -153,6 +193,7 @@ export class WorkletPlayback {
         try {
             this.stopAllAudio();
             this.clearAllAudio();
+            this._post({ type: 'unregisterAll', key: '', data: null });
         } catch {
             // Ignore an already-closed port.
         }
@@ -162,6 +203,7 @@ export class WorkletPlayback {
             // Ignore.
         }
         this.audioWorkletNode = null;
+        this.registered.clear();
     }
 
     // ---- Internal ----
