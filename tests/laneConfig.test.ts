@@ -33,3 +33,26 @@ describe('10K lane layout', () => {
     expect(getLaneConfigForSide('10K', '2P').map((l) => l.column)).toEqual(['8', '9', '10', '11', '12', 'SC2']);
   });
 });
+
+describe('Qwilight 4K / 6K / 8K lane layouts', () => {
+  const chart = (lines: string[]) => ['#PLAYER 1', '#BPM 150', '#WAV01 a.wav', ...lines].join('\n');
+
+  it.each([
+    ['4K', ['#00111:01', '#00112:01', '#00114:01', '#00115:01'], ['1', '2', '4', '5']],
+    ['6K', ['#00111:01', '#00112:01', '#00113:01', '#00115:01', '#00118:01', '#00119:01'], ['1', '2', '3', '5', '6', '7']],
+    ['8K', ['#00116:01', '#00111:01', '#00112:01', '#00113:01', '#00114:01', '#00115:01', '#00118:01', '#00119:01'],
+      ['SC', '1', '2', '3', '4', '5', '6', '7']],
+  ])('%s draws every lane the extension command plays', (mode, data, lanes) => {
+    const config = getLaneConfigForSide(mode, '1P');
+    expect(config.map((l) => l.column)).toEqual(lanes);
+    for (const col of columnsOf(chart(data))) {
+      expect(config.some((l) => l.column === col)).toBe(true);
+    }
+  });
+
+  it('8K draws channel 16 as an ordinary key, not a scratch', () => {
+    const [first, second] = LANE_CONFIG_MAP['8K'];
+    expect(first.column).toBe('SC');
+    expect(first.width).toBe(second.width);
+  });
+});

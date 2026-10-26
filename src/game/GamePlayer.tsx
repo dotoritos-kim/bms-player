@@ -36,6 +36,11 @@ export interface GamePlayerProps {
   laneWidthScale?: number;
   /** Auto fullscreen (enters fullscreen automatically when the game starts) */
   autoFullscreen?: boolean;
+  /**
+   * Key mode decided by the chart loader (e.g. from Qwilight's #4K / #6K / #8K).
+   * Detected from the note columns when omitted.
+   */
+  keyMode?: string;
   /** Completion callback */
   onComplete?: (score: ScoreState, cleared: boolean) => void;
   /** Exit callback (back navigation) */
@@ -331,6 +336,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
   noteScale = 1,
   laneWidthScale = 1,
   autoFullscreen = false,
+  keyMode: keyModeProp,
   onComplete,
   onExit,
 }) => {
@@ -370,10 +376,10 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
 
   // Compute lane config based on playSide
   const laneConfig = useMemo(() => {
-    // Extract keyMode from the notechart
-    const keyMode = notechart?.getKeyMode?.('SC') || '7K';
+    // The loader's key mode wins; otherwise detect it from the notechart
+    const keyMode = keyModeProp || notechart?.getKeyMode?.('SC') || '7K';
     return getLaneConfigForSide(keyMode, playSide);
-  }, [notechart, playSide]);
+  }, [keyModeProp, notechart, playSide]);
 
   // Calculate green number (visible time in ms) from current BPM and hi-speed
   // Green Number = (visible_beats / (BPM / 60)) * 1000 / hiSpeed

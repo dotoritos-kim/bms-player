@@ -95,36 +95,34 @@ export const LANE_CONFIG_14K: LaneConfig[] = [
   { column: 'SC2', width: 50, color: '#ff3366', pressedColor: '#ff6699' },
 ];
 
-// 4K+SC
+// Qwilight #4K: channels 11, 12, 14, 15
 export const LANE_CONFIG_4K: LaneConfig[] = [
-  { column: 'SC', width: 60, color: '#ff3366', pressedColor: '#ff6699' },
-  { column: '1',  width: 50, color: '#ffffff', pressedColor: '#aaaaaa' },
-  { column: '2',  width: 50, color: '#3399ff', pressedColor: '#66bbff' },
-  { column: '3',  width: 50, color: '#3399ff', pressedColor: '#66bbff' },
-  { column: '4',  width: 50, color: '#ffffff', pressedColor: '#aaaaaa' },
+  { column: '1', width: 50, color: '#ffffff', pressedColor: '#aaaaaa' },
+  { column: '2', width: 50, color: '#3399ff', pressedColor: '#66bbff' },
+  { column: '4', width: 50, color: '#3399ff', pressedColor: '#66bbff' },
+  { column: '5', width: 50, color: '#ffffff', pressedColor: '#aaaaaa' },
 ];
 
-// 6K+SC
+// Qwilight #6K: channels 11, 12, 13, 15, 18, 19
 export const LANE_CONFIG_6K: LaneConfig[] = [
-  { column: 'SC', width: 60, color: '#ff3366', pressedColor: '#ff6699' },
-  { column: '1',  width: 42, color: '#ffffff', pressedColor: '#aaaaaa' },
-  { column: '2',  width: 42, color: '#3399ff', pressedColor: '#66bbff' },
-  { column: '3',  width: 42, color: '#ffffff', pressedColor: '#aaaaaa' },
-  { column: '4',  width: 42, color: '#3399ff', pressedColor: '#66bbff' },
-  { column: '5',  width: 42, color: '#ffffff', pressedColor: '#aaaaaa' },
-  { column: '6',  width: 42, color: '#3399ff', pressedColor: '#66bbff' },
+  { column: '1', width: 44, color: '#ffffff', pressedColor: '#aaaaaa' },
+  { column: '2', width: 44, color: '#3399ff', pressedColor: '#66bbff' },
+  { column: '3', width: 44, color: '#ffffff', pressedColor: '#aaaaaa' },
+  { column: '5', width: 44, color: '#ffffff', pressedColor: '#aaaaaa' },
+  { column: '6', width: 44, color: '#3399ff', pressedColor: '#66bbff' },
+  { column: '7', width: 44, color: '#ffffff', pressedColor: '#aaaaaa' },
 ];
 
-// 8K (no SC)
+// Qwilight #8K: channel 16 is the leftmost key (not a scratch), then 11-15, 18, 19
 export const LANE_CONFIG_8K: LaneConfig[] = [
-  { column: '1', width: 38, color: '#ff6b6b', pressedColor: '#ff9999' },
-  { column: '2', width: 38, color: '#ffd93d', pressedColor: '#ffee88' },
-  { column: '3', width: 38, color: '#6bcb77', pressedColor: '#99dd99' },
-  { column: '4', width: 38, color: '#4d96ff', pressedColor: '#88bbff' },
-  { column: '5', width: 38, color: '#4d96ff', pressedColor: '#88bbff' },
-  { column: '6', width: 38, color: '#6bcb77', pressedColor: '#99dd99' },
-  { column: '7', width: 38, color: '#ffd93d', pressedColor: '#ffee88' },
-  { column: '8', width: 38, color: '#ff6b6b', pressedColor: '#ff9999' },
+  { column: 'SC', width: 38, color: '#ffffff', pressedColor: '#aaaaaa' },
+  { column: '1',  width: 38, color: '#3399ff', pressedColor: '#66bbff' },
+  { column: '2',  width: 38, color: '#ffffff', pressedColor: '#aaaaaa' },
+  { column: '3',  width: 38, color: '#3399ff', pressedColor: '#66bbff' },
+  { column: '4',  width: 38, color: '#ffffff', pressedColor: '#aaaaaa' },
+  { column: '5',  width: 38, color: '#3399ff', pressedColor: '#66bbff' },
+  { column: '6',  width: 38, color: '#ffffff', pressedColor: '#aaaaaa' },
+  { column: '7',  width: 38, color: '#3399ff', pressedColor: '#66bbff' },
 ];
 
 // 10K (5K+SC DP) — 1P

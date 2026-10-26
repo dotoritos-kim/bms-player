@@ -399,23 +399,18 @@ function detectKeyModeFromColumns(columns: string[]): string {
         return '12K';
     }
 
+    // 4K/6K/8K (Qwilight #4K / #6K / #8K) come from the chart's extension
+    // command, which the columns cannot show: pass `keyMode` to GamePlayer.
+
     // SP with IIDX special lanes
     if (hasIIDXSpecial) {
-        const keyColumns = ['1', '2', '3', '4', '5', '6', '7'];
-        const usedKeyCount = keyColumns.filter(col => usedColumns.has(col)).length;
-        if (usedKeyCount >= 7) return '7K';
-        if (usedKeyCount === 6) return '6K';
-        if (usedKeyCount === 5) return '5K';
-        return '4K';
+        return usedColumns.has('6') || usedColumns.has('7') ? '7K' : '5K';
     }
 
     // Keyboard SP (no scratch)
     if (maxNumericColumn >= 24) return '48K';
     if (maxNumericColumn >= 12) return '24K';
-    if (maxNumericColumn >= 9) return '9K';
-    if (maxNumericColumn >= 8) return '8K';
-    if (maxNumericColumn >= 7) return '7K';
-    if (maxNumericColumn >= 6) return '6K';
-    if (maxNumericColumn >= 5) return '5K';
-    return '4K';
+    if (maxNumericColumn >= 8) return '9K';
+    if (maxNumericColumn >= 6) return '7K';
+    return '5K';
 }
