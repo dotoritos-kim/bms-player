@@ -28,6 +28,7 @@ export { useKeysoundPlayerStore, hashKeysounds } from './store';
 // Loader
 export { AudioPreloader, type FileMap, type WorkerFactory, type AudioPreloaderOptions } from './loader/AudioPreloader';
 export { AudioProcessorWorkletUrl } from './loader/AudioProcessor.worklet';
+export { createAudioLoaderWorker } from './loader/createAudioLoaderWorker';
 export { PlayerAudio, createClosestNoteFinder } from './loader/AudioPlayer';
 export type {
     Track,

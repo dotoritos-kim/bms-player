@@ -9,6 +9,7 @@
 export {
     AudioPreloader,
     AudioProcessorWorkletUrl,
+    createAudioLoaderWorker,
     PlayerAudio,
     createClosestNoteFinder,
     audioIndexedDBCache,

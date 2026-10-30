@@ -8,6 +8,7 @@
 
 import { keysoundKey } from '@rhythm-archive/bms-core';
 import { AudioPreloader, type FileMap, type WorkerFactory, type AudioPreloaderOptions } from './loader/AudioPreloader';
+import { createAudioLoaderWorker } from './loader/createAudioLoaderWorker';
 import { resolveKeysoundFiles, type ResolveOptions, type AudioFileMapFetcher } from './loader/resolveKeysoundFiles';
 
 /**
@@ -62,7 +63,7 @@ export interface KeysoundPlayerOptions {
   performanceMode?: boolean;
   /** Use simplified effects (default: false). */
   simplifiedEffects?: boolean;
-  /** Worker factory that constructs an AudioLoader worker instance. */
+  /** Worker factory that constructs an AudioLoader worker instance (default: createAudioLoaderWorker). */
   workerFactory?: WorkerFactory;
   /** Stem-based file-resolution config (omit to use the fileMap directly). */
   resolve?: KeysoundPlayerResolveConfig;
@@ -70,7 +71,6 @@ export interface KeysoundPlayerOptions {
 
 
 export class KeysoundPlayer {
-  readonly preloader: AudioPreloader | null = null;
   private _preloader: AudioPreloader | null = null;
   private options: Required<Omit<KeysoundPlayerOptions, 'resolve'>> & { resolve?: KeysoundPlayerResolveConfig };
   private isLoading = false;
@@ -99,7 +99,7 @@ export class KeysoundPlayer {
       base62: options.base62 ?? false,
       performanceMode: options.performanceMode ?? true,
       simplifiedEffects: options.simplifiedEffects ?? false,
-      workerFactory: options.workerFactory ?? (() => { throw new Error('workerFactory is required for KeysoundPlayer'); }),
+      workerFactory: options.workerFactory ?? createAudioLoaderWorker,
       resolve: options.resolve,
     };
 
@@ -153,6 +153,15 @@ export class KeysoundPlayer {
       console.warn('[KeysoundPlayer] Resolve returned no results, falling back to raw filenames');
       this.buildFileMap();
     }
+  }
+
+  /**
+   * The loaded preloader (GameLoop reads its AudioContext). It was a field that
+   * nothing assigned, so it stayed null and did not satisfy the KeysoundPlayer
+   * interface.
+   */
+  get preloader(): AudioPreloader | undefined {
+    return this._preloader ?? undefined;
   }
 
   get isReady(): boolean {

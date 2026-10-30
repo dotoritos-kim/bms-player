@@ -10,6 +10,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { BMSParser, KeySounds, Timing, keysoundKey } from '@rhythm-archive/bms-core';
 import type { BMSNote } from '@rhythm-archive/bms-core';
 import { AudioPreloader, FileMap, resolveKeysoundFiles, type ResolveOptions, type AudioFileMapFetcher } from '../audio';
+import { createAudioLoaderWorker } from '../audio/loader/createAudioLoaderWorker';
 import { WorkerAudioScheduler } from '../game/WorkerAudioScheduler';
 import type { SchedulerNote } from '../game/AudioSchedulerWorker';
 
@@ -39,7 +40,7 @@ export interface BmsPreviewOptions {
     onError?: (error: Error) => void;
     /**
      * Worker factory function for AudioLoader.
-     * Consumers must provide this since Worker instantiation is bundler-specific.
+     * Defaults to `createAudioLoaderWorker` (module worker via `new URL`).
      */
     workerFactory?: () => Worker;
     /** Stem-based file resolution config (uses original filenames when absent) */
@@ -277,10 +278,7 @@ export function useBmsPreview(options: BmsPreviewOptions): [BmsPreviewState, Bms
         }
 
         // 5. Load the keysounds
-        if (!workerFactory) {
-            throw new Error('workerFactory is required for BGM channel playback');
-        }
-        workerRef.current = workerFactory();
+        workerRef.current = (workerFactory ?? createAudioLoaderWorker)();
         preloaderRef.current = new AudioPreloader(
             baseUrl,
             resolvedFileMap,
