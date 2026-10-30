@@ -44,4 +44,31 @@ describe('AudioDecoder', () => {
         expect(stored.duration).toBe(16);
         expect(decoder.count).toBe(1);
     });
+
+    it('counts keys already in the shared cache, so waitForAll returns', async () => {
+        const { ctx, flush } = fakeContext();
+        // a first player for the folder decodes into the global cache
+        const first = new AudioDecoder(ctx, new AudioBufferStore('shared-folder', true), () => false);
+        const p = first.decodeOne('01', new ArrayBuffer(8));
+        flush();
+        await p;
+
+        // a second player for the same folder finds it there
+        const second = new AudioDecoder(ctx, new AudioBufferStore('shared-folder', true), () => false);
+        await second.decodeOne('01', new ArrayBuffer(8));
+        expect(second.count).toBe(1);
+        const t0 = Date.now();
+        await second.waitForAll(() => 1, 2_000);
+        expect(Date.now() - t0).toBeLessThan(200);
+    });
+
+    it('counts a key decoded progressively and again in a batch once', async () => {
+        const { ctx, flush } = fakeContext();
+        const decoder = new AudioDecoder(ctx, new AudioBufferStore('once', false), () => false);
+        const p = decoder.decodeOne('01', new ArrayBuffer(4));
+        flush();
+        await p;
+        await decoder.decodeAll([['01', new ArrayBuffer(4)]], new Promise(() => {}));
+        expect(decoder.count).toBe(1);
+    });
 });

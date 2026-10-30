@@ -22,6 +22,9 @@ export interface PlayOptions {
 export class WorkletPlayback {
     private audioWorkletNode: AudioWorkletNode | null = null;
     private trackIdCounter = 0;
+    /** Master volume / rate set before the worklet existed, applied by initWorklet */
+    private pendingVolume: number | null = null;
+    private pendingRate: number | null = null;
     /** Buffer currently registered in the worklet per key. */
     private readonly registered = new Map<string, AudioBuffer>();
 
@@ -42,6 +45,11 @@ export class WorkletPlayback {
         this.effects.build(this.audioWorkletNode, effectSettings);
 
         this.registered.clear();
+        // Settings made while the module was still loading
+        if (this.pendingVolume !== null) this.setMasterVolume(this.pendingVolume);
+        if (this.pendingRate !== null) this.setPlaybackRate(this.pendingRate);
+        this.pendingVolume = null;
+        this.pendingRate = null;
     }
 
     get isReady(): boolean {
@@ -174,32 +182,48 @@ export class WorkletPlayback {
 
     // ---- Control ----
 
+    // Before initWorklet nothing plays: stop / clear have nothing to act on
+    // (players stop audio while their keysounds are still loading, e.g. on a
+    // tab switch) and are skipped instead of logging an error.
+
     stopAudio(trackId: string): void {
-        this._post({ type: 'stop', key: trackId, data: null });
+        if (this.audioWorkletNode) this._post({ type: 'stop', key: trackId, data: null });
     }
 
     stopAllAudio(): void {
-        this._post({ type: 'stopAll', key: '', data: null });
+        if (this.audioWorkletNode) this._post({ type: 'stopAll', key: '', data: null });
     }
 
     clearAudio(trackId: string): void {
-        this._post({ type: 'clear', key: trackId, data: null });
+        if (this.audioWorkletNode) this._post({ type: 'clear', key: trackId, data: null });
     }
 
     clearAllAudio(): void {
-        this._post({ type: 'clearAll', key: '', data: null });
+        if (this.audioWorkletNode) this._post({ type: 'clearAll', key: '', data: null });
     }
 
     setMasterVolume(volume: number): void {
-        this._post({ type: 'setVolume', key: '', data: Math.max(0, Math.min(1, volume)) });
+        const v = Math.max(0, Math.min(1, volume));
+        if (!this.audioWorkletNode) {
+            this.pendingVolume = v;
+            return;
+        }
+        this._post({ type: 'setVolume', key: '', data: v });
     }
 
     adjustVolume(trackId: string, volume: number): void {
-        this._post({ type: 'adjustVolume', key: trackId, data: Math.max(0, Math.min(1, volume)) });
+        if (this.audioWorkletNode) {
+            this._post({ type: 'adjustVolume', key: trackId, data: Math.max(0, Math.min(1, volume)) });
+        }
     }
 
     setPlaybackRate(rate: number): void {
-        this._post({ type: 'setPlaybackRate', key: '', data: Math.max(0.25, Math.min(4.0, rate)) });
+        const r = Math.max(0.25, Math.min(4.0, rate));
+        if (!this.audioWorkletNode) {
+            this.pendingRate = r;
+            return;
+        }
+        this._post({ type: 'setPlaybackRate', key: '', data: r });
     }
 
     // ---- Disposal ----
@@ -208,7 +232,7 @@ export class WorkletPlayback {
         try {
             this.stopAllAudio();
             this.clearAllAudio();
-            this._post({ type: 'unregisterAll', key: '', data: null });
+            if (this.audioWorkletNode) this._post({ type: 'unregisterAll', key: '', data: null });
         } catch {
             // Ignore an already-closed port.
         }
