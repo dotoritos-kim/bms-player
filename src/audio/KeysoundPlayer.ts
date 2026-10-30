@@ -219,9 +219,6 @@ export class KeysoundPlayer {
         { ...this.preloaderOptions, latencyHint: frameDuration }
       );
 
-      // Make preloader accessible via readonly property
-      (this as { preloader: AudioPreloader | null }).preloader = this._preloader;
-
       this._contextStateHandler = () => {
         const ctx = this._preloader?.context;
         if (!ctx) return;
@@ -525,7 +522,6 @@ export class KeysoundPlayer {
     if (this._preloader) {
       this._preloader.releaseAllResources();
       this._preloader = null;
-      (this as { preloader: AudioPreloader | null }).preloader = null;
     }
     this._isReady = false;
     this._isRecovering = false;
