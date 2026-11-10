@@ -556,6 +556,11 @@ export class GameLoop {
     this.autoplayReleaseTimers = [];
   }
 
+  /** Turns autoplay on or off, also mid-song. */
+  setAutoplay(autoplay: boolean): void {
+    this.engine.setAutoplay(autoplay);
+  }
+
   dispose(): void {
     this.stop();
     // Only tear down an InputHandler we created. An injected handler is

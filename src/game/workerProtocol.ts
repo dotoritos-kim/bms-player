@@ -43,6 +43,13 @@ export type MainToWorkerMessage =
       };
     }
   | { type: 'keyUp'; payload: { column: KeyColumn; time: number } }
+  /**
+   * Game time by the audio clock at the epoch time `time`. The worker runs on
+   * performance.now() and follows these reports so it does not drift from the music.
+   */
+  | { type: 'clockSync'; payload: { gameTimeMs: number; time: number } }
+  /** Turn autoplay on / off mid-song. */
+  | { type: 'setAutoplay'; payload: { autoplay: boolean } }
   | { type: 'dispose' };
 
 export interface WorkerInitPayload {

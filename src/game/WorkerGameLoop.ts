@@ -68,6 +68,13 @@ export class WorkerGameLoop {
   // setTimeout handles for autoplay key-release simulation (mirrors GameLoop)
   private autoplayReleaseTimers: ReturnType<typeof setTimeout>[] = [];
 
+  // Autoplay: the worker plays the notes, so a key press must not sound them too
+  private autoplay: boolean;
+
+  // Reports the audio clock to the worker (see ClockSlew)
+  private clockSyncTimer: ReturnType<typeof setInterval> | null = null;
+  private static readonly CLOCK_SYNC_INTERVAL_MS = 500;
+
   // Timing for getCurrentTime() on Main Thread
   private contextStartTime: number = 0;
   private pauseTime: number = 0;
@@ -84,6 +91,7 @@ export class WorkerGameLoop {
     this.callbacks = callbacks;
     this.playbackRate = Math.max(0.1, Math.min(4, config.playbackRate ?? 1));
     this.startOffset = config.startOffset ?? 0;
+    this.autoplay = config.autoplay ?? false;
 
     // Input handler
     this.ownsInputHandler = !config.inputHandler;
@@ -178,6 +186,7 @@ export class WorkerGameLoop {
     this.inputHandler.setEnabled(true);
     this.keysoundPlayer.resumeAll?.();
     this.postToWorker({ type: 'start' });
+    this.startClockSync();
   }
 
   pause(): void {
@@ -193,6 +202,7 @@ export class WorkerGameLoop {
     if (this.keysoundPlayer.pauseAll) this.keysoundPlayer.pauseAll();
     else this.keysoundPlayer.stopAll();
     this.postToWorker({ type: 'pause' });
+    this.stopClockSync();
     this.emitPhaseState();
   }
 
@@ -205,6 +215,7 @@ export class WorkerGameLoop {
     this.inputHandler.setEnabled(true);
     this.keysoundPlayer.resumeAll?.();
     this.postToWorker({ type: 'resume' });
+    this.startClockSync();
     this.emitPhaseState();
   }
 
@@ -216,6 +227,7 @@ export class WorkerGameLoop {
     // Stopped from the pause menu: do not leave the player frozen.
     this.keysoundPlayer.resumeAll?.();
     this.clearAutoplayTimers();
+    this.stopClockSync();
     this.postToWorker({ type: 'stop' });
     if (wasActive) this.emitPhaseState();
   }
@@ -233,6 +245,34 @@ export class WorkerGameLoop {
     this.postToWorker({ type: 'dispose' });
     this.worker.onmessage = null;
     this.worker.onerror = null;
+  }
+
+  /** Turns autoplay on or off, also mid-song. */
+  setAutoplay(autoplay: boolean): void {
+    if (this.autoplay === autoplay) return;
+    this.autoplay = autoplay;
+    this.postToWorker({ type: 'setAutoplay', payload: { autoplay } });
+  }
+
+  /**
+   * The worker's clock is performance.now(); the music runs on the audio
+   * device's clock. Report the audio-clock game time regularly so the worker
+   * follows it instead of drifting over a long song.
+   */
+  private startClockSync(): void {
+    this.stopClockSync();
+    this.clockSyncTimer = setInterval(() => {
+      if (this._phase.kind !== 'playing') return;
+      this.postToWorker({
+        type: 'clockSync',
+        payload: { gameTimeMs: this.getCurrentTime(), time: performance.timeOrigin + performance.now() },
+      });
+    }, WorkerGameLoop.CLOCK_SYNC_INTERVAL_MS);
+  }
+
+  private stopClockSync(): void {
+    if (this.clockSyncTimer !== null) clearInterval(this.clockSyncTimer);
+    this.clockSyncTimer = null;
   }
 
   /**
@@ -302,7 +342,8 @@ export class WorkerGameLoop {
     this.callbacks.onKeyInput?.(column, true);
 
     // 0ms keysound: play from nextNotes cache immediately
-    const nextNote = this.nextNotesCache.get(column);
+    // (not under autoplay: the worker sounds every note itself)
+    const nextNote = this.autoplay ? undefined : this.nextNotesCache.get(column);
     const playedKeysound = nextNote?.keysound
       ? { keysound: nextNote.keysound, offset: nextNote.offset }
       : undefined;
@@ -404,6 +445,7 @@ export class WorkerGameLoop {
         break;
 
       case 'complete':
+        this.stopClockSync();
         this._phase = PHASE_COMPLETED;
         this.inputHandler.setEnabled(false);
         this.clearAutoplayTimers();
@@ -411,6 +453,7 @@ export class WorkerGameLoop {
         break;
 
       case 'failed':
+        this.stopClockSync();
         this._phase = PHASE_FAILED;
         this.inputHandler.setEnabled(false);
         this.clearAutoplayTimers();

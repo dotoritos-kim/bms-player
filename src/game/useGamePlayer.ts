@@ -239,6 +239,11 @@ export function useGamePlayer(
     inputHandlerRef.current.setKeyMap(bindingsToKeyMap(options.keyBindings ?? loadKeyBindingsFor(options.keyMode)));
   }, [options.keyBindings, options.keyMode]);
 
+  // The autoplay option also applies to a game already running.
+  useEffect(() => {
+    gameLoopRef.current?.setAutoplay(options.autoplay ?? false);
+  }, [options.autoplay]);
+
   // The loop reports state every few ms (the worker ticks at 200 Hz) but the
   // screen shows one frame at a time: keep only the newest playing state and
   // hand it to React once per animation frame. Rendering every report cost

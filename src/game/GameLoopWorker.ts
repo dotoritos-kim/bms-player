@@ -15,6 +15,7 @@ import type {
   WorkerInitPayload,
 } from './workerProtocol';
 import type { INotechart, GameNote, SoundedEvent } from '../audio/judgements';
+import { ClockSlew } from './clockSlew';
 
 // ==================== Lightweight Notechart Proxy ====================
 
@@ -92,6 +93,7 @@ let startTimestamp: number = 0; // performance.now() when game started
 let pauseGameTime: number = 0;  // game time when paused
 let playbackRate: number = 1;
 let startOffset: number = 0;
+const clockSlew = new ClockSlew();
 
 function getCurrentGameTime(): number {
   if (!engine || !engine.isPlaying) return 0;
@@ -209,6 +211,7 @@ function handleStart(): void {
   engine.start();
   startTimestamp = performance.now();
   pauseGameTime = 0;
+  clockSlew.reset();
   startTick();
 }
 
@@ -224,6 +227,7 @@ function handleResume(): void {
   engine.resume();
   // Recalculate startTimestamp so getCurrentGameTime() continues from pauseGameTime
   startTimestamp = performance.now() - (pauseGameTime / playbackRate - startOffset);
+  clockSlew.reset();
   startTick();
 }
 
@@ -250,6 +254,19 @@ function gameTimeForInput(eventEpochMs: number | undefined): number {
   // Reject stamps from a different clock domain or older than a second.
   if (!Number.isFinite(t) || t > now + 5 || t < now - 1000) return now;
   return t;
+}
+
+/**
+ * The main thread's game time by the audio clock, stamped with the epoch time
+ * it was read at. Nudges this worker's clock towards it (see ClockSlew).
+ */
+function handleClockSync(audioGameTimeMs: number, eventEpochMs: number): void {
+  if (!engine || !engine.isPlaying || engine.isPaused) return;
+  if (!Number.isFinite(audioGameTimeMs) || !Number.isFinite(eventEpochMs)) return;
+  const elapsed = eventEpochMs - (performance.timeOrigin + startTimestamp);
+  const localGameTimeMs = (elapsed + startOffset) * playbackRate;
+  // Game-time error → wall-clock ms; moving the start earlier advances the clock.
+  startTimestamp -= clockSlew.correction((audioGameTimeMs - localGameTimeMs) / playbackRate);
 }
 
 function handleKeyDown(
@@ -294,6 +311,12 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
       break;
     case 'keyUp':
       handleKeyUp(msg.payload.column, msg.payload.time);
+      break;
+    case 'clockSync':
+      handleClockSync(msg.payload.gameTimeMs, msg.payload.time);
+      break;
+    case 'setAutoplay':
+      engine?.setAutoplay(msg.payload.autoplay);
       break;
     case 'dispose':
       handleStop();

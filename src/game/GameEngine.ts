@@ -260,6 +260,17 @@ export class GameEngine {
     this._phase = PHASE_READY;
   }
 
+  /**
+   * Turns autoplay on or off, also mid-song. Turning it on takes over from
+   * here (long notes being held are finished by autoplay); turning it off
+   * hands the lanes back, and a long note autoplay was holding needs its key.
+   */
+  setAutoplay(autoplay: boolean): void {
+    this._autoplay = autoplay;
+  }
+
+  get autoplay(): boolean { return this._autoplay; }
+
   /** Stage 3 — exposes the discriminated union as the primary API. */
   get phase(): GamePhase { return this._phase; }
   /** @deprecated Prefer `phase.kind === 'playing' || phase.kind === 'paused'`. */
@@ -369,9 +380,11 @@ export class GameEngine {
       nextNotes: new Map(),
     };
 
-    if (this._phase.kind !== 'playing' || this._autoplay) return result;
+    if (this._phase.kind !== 'playing') return result;
 
+    // Tracked under autoplay too, so the keys are right when it is turned off.
     this.heldKeys.add(column);
+    if (this._autoplay) return result;
 
     // Find closest note
     const noteIndex = this.findClosestNote(column, currentTime);
@@ -441,9 +454,10 @@ export class GameEngine {
       nextNotes: new Map(),
     };
 
-    if (this._phase.kind !== 'playing' || this._autoplay) return result;
+    if (this._phase.kind !== 'playing') return result;
 
     this.heldKeys.delete(column);
+    if (this._autoplay) return result;
 
     const note = this.activeHolds.get(column);
     if (!note || !note.end) return result;
