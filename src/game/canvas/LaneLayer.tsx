@@ -13,6 +13,20 @@ import type { LaneConfig } from './laneConfig';
 
 export const JUDGMENT_LINE_Y = 100;
 const KEY_BEAM_HEIGHT = 120;
+/** Position units per world unit of lane travel (at hi-speed 1). */
+export const UNITS_PER_POSITION = 100;
+/** Fewest positions kept visible above the judgment line (the green number assumes it). */
+export const MIN_VISIBLE_POSITIONS = 8;
+
+/**
+ * Positions visible above the judgment line for a canvas of this height at
+ * hi-speed 1. A canvas taller than the 8-position minimum shows more, so
+ * notes enter at the top edge instead of popping in part-way down.
+ */
+export function visiblePositions(height: number): number {
+  const fits = (height - JUDGMENT_LINE_Y) / UNITS_PER_POSITION;
+  return Number.isFinite(fits) ? Math.max(MIN_VISIBLE_POSITIONS, fits) : MIN_VISIBLE_POSITIONS;
+}
 
 // ── Static background (independent of key state) ─────────────────────────
 
@@ -20,10 +34,12 @@ const StaticLanesBackground: React.FC<{
   laneConfig: LaneConfig[];
   lanePositions: Map<KeyColumn, { x: number; width: number }>;
   totalWidth: number;
-}> = React.memo(({ laneConfig, lanePositions, totalWidth }) => (
+  /** Camera height: the lanes fill the whole canvas, however tall. */
+  height: number;
+}> = React.memo(({ laneConfig, lanePositions, totalWidth, height }) => (
   <>
-    <mesh position={[0, 300, 0]}>
-      <planeGeometry args={[totalWidth + 20, 800]} />
+    <mesh position={[0, height / 2, 0]}>
+      <planeGeometry args={[totalWidth + 20, height]} />
       <meshBasicMaterial color="#1a1a2e" transparent opacity={0.9} />
     </mesh>
 
@@ -31,8 +47,8 @@ const StaticLanesBackground: React.FC<{
       const pos = lanePositions.get(lane.column);
       if (!pos) return null;
       return (
-        <mesh key={lane.column} position={[pos.x, 300, 0]}>
-          <planeGeometry args={[pos.width - 2, 800]} />
+        <mesh key={lane.column} position={[pos.x, height / 2, 0]}>
+          <planeGeometry args={[pos.width - 2, height]} />
           <meshBasicMaterial color="#2a2a4e" transparent opacity={0.2} />
         </mesh>
       );
@@ -43,8 +59,8 @@ const StaticLanesBackground: React.FC<{
       if (!pos) return null;
       const lineX = pos.x + pos.width / 2;
       return (
-        <mesh key={`divider-${i}`} position={[lineX, 300, 0.1]}>
-          <planeGeometry args={[1, 800]} />
+        <mesh key={`divider-${i}`} position={[lineX, height / 2, 0.1]}>
+          <planeGeometry args={[1, height]} />
           <meshBasicMaterial color="#444466" />
         </mesh>
       );
@@ -92,15 +108,17 @@ export interface LaneLayerProps {
   laneConfig: LaneConfig[];
   lanePositions: Map<KeyColumn, { x: number; width: number }>;
   totalWidth: number;
+  height: number;
 }
 
 export const LaneLayer: React.FC<LaneLayerProps> = React.memo(
-  ({ heldKeys, laneConfig, lanePositions, totalWidth }) => (
+  ({ heldKeys, laneConfig, lanePositions, totalWidth, height }) => (
     <group position={[0, 0, -1]}>
       <StaticLanesBackground
         laneConfig={laneConfig}
         lanePositions={lanePositions}
         totalWidth={totalWidth}
+        height={height}
       />
       <KeyBeams
         heldKeys={heldKeys}

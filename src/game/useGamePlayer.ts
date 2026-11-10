@@ -18,7 +18,7 @@ import {
   type GaugeType,
   type KeyColumn,
   type ScoreState,
-  loadKeyBindings,
+  loadKeyBindingsFor,
   bindingsToKeyMap,
   type KeyBindings,
   KEY_MAP_2P,
@@ -54,6 +54,8 @@ export interface GamePlayerOptions {
   autoplay?: boolean;
   /** Custom key bindings */
   keyBindings?: KeyBindings;
+  /** Key mode of the chart: picks the default key layout (see `loadKeyBindingsFor`). */
+  keyMode?: string;
   /** Play side (1P, 2P, DP) */
   playSide?: '1P' | '2P' | 'DP';
   /** Floating Hi-Speed (keeps the Green Number constant across BPM changes) */
@@ -203,7 +205,7 @@ export function useGamePlayer(
       keyMap = KEY_MAP_2P;
     } else {
       // 1P or DP mode uses the saved key bindings or defaults
-      const keyBindings = optionsRef.current.keyBindings ?? loadKeyBindings();
+      const keyBindings = optionsRef.current.keyBindings ?? loadKeyBindingsFor(optionsRef.current.keyMode);
       keyMap = bindingsToKeyMap(keyBindings);
     }
 
@@ -228,12 +230,39 @@ export function useGamePlayer(
         inputHandlerRef.current = null;
       }
     };
-  }, [notechart, keysoundPlayer, options.playSide]);
+  }, [notechart, keysoundPlayer, options.playSide, options.keyMode]);
+
+  // The loop reports state every few ms (the worker ticks at 200 Hz) but the
+  // screen shows one frame at a time: keep only the newest playing state and
+  // hand it to React once per animation frame. Rendering every report cost
+  // about three React commits per displayed frame for the whole song.
+  const pendingStateRef = useRef<GameLoopState | null>(null);
+  const stateFrameRef = useRef(0);
+  const cancelStateFrame = useCallback(() => {
+    if (stateFrameRef.current) cancelAnimationFrame(stateFrameRef.current);
+    stateFrameRef.current = 0;
+    pendingStateRef.current = null;
+  }, []);
+  useEffect(() => cancelStateFrame, [cancelStateFrame]);
 
   // GameLoop callbacks
   const callbacks: GameLoopCallbacks = useMemo(() => ({
     onUpdate: (state) => {
-      setGameState(state);
+      // Phase changes (pause, stop, complete, failed) go out at once and drop
+      // any older playing state still waiting for its frame.
+      if (!state.isPlaying || state.isPaused || typeof requestAnimationFrame !== 'function') {
+        cancelStateFrame();
+        setGameState(state);
+        return;
+      }
+      pendingStateRef.current = state;
+      if (stateFrameRef.current) return;
+      stateFrameRef.current = requestAnimationFrame(() => {
+        stateFrameRef.current = 0;
+        const latest = pendingStateRef.current;
+        pendingStateRef.current = null;
+        if (latest) setGameState(latest);
+      });
     },
     onJudgment: (event) => {
       setLastJudgment(event);
@@ -266,7 +295,7 @@ export function useGamePlayer(
         return next;
       });
     },
-  }), []);
+  }), [cancelStateFrame]);
 
   // GameLoop factory (uses WorkerGameLoop when a Worker is provided)
   const createGameLoop = useCallback((): GameLoop | WorkerGameLoop | null => {

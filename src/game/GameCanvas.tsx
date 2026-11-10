@@ -36,8 +36,8 @@ import {
   calculateLanePositions,
   getLaneColorMap,
 } from './canvas/laneConfig';
-import { LaneLayer, JudgmentLine, CameraController } from './canvas/LaneLayer';
-import { NotesRenderer, LandmineRenderer, LongNotesRenderer } from './canvas/NoteLayer';
+import { LaneLayer, JudgmentLine, CameraController, visiblePositions } from './canvas/LaneLayer';
+import { NotesRenderer, LandmineRenderer, LongNotesRenderer, BarLinesRenderer } from './canvas/NoteLayer';
 import {
   HitEffectsManager,
   type HitEffectsManagerHandle,
@@ -127,6 +127,9 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
       [laneConfig, laneWidthScale],
     );
 
+    // Notes are drawn up to the top edge of the canvas, whatever its height
+    const visibleRange = useMemo(() => visiblePositions(height), [height]);
+
     // Compute current position (guarded against NaN/Infinity)
     const currentPosition = useMemo(() => {
       if (!notechart?.beatToPosition) return 0;
@@ -196,7 +199,19 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
             laneConfig={laneConfig}
             lanePositions={lanePositions}
             totalWidth={totalWidth}
+            height={height}
           />
+
+          {/* Measure lines */}
+          {notechart?.barLines && (
+            <BarLinesRenderer
+              barLines={notechart.barLines}
+              currentPosition={currentPosition}
+              hiSpeed={hiSpeed}
+              totalWidth={totalWidth}
+              visibleRange={visibleRange}
+            />
+          )}
 
           {/* Judgment line */}
           <JudgmentLine totalWidth={totalWidth} />
@@ -211,6 +226,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
               lanePositions={lanePositions}
               laneColorMap={laneColorMap}
               noteScale={noteScale}
+              visibleRange={visibleRange}
             />
           )}
           {notechart?.notes && (
@@ -223,6 +239,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
               lanePositions={lanePositions}
               laneConfig={laneConfig}
               noteScale={noteScale}
+              visibleRange={visibleRange}
             />
           )}
           {notechart?.landmines && notechart.landmines.length > 0 && (
@@ -233,6 +250,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(
               triggeredMineIds={activeMineIds}
               lanePositions={lanePositions}
               noteScale={noteScale}
+              visibleRange={visibleRange}
             />
           )}
 

@@ -12,6 +12,8 @@ import { JudgmentEngine } from './JudgmentEngine';
 import { GaugeSystem, type GaugeType, getGaugeClearTarget } from './GaugeSystem';
 import type { ScoreState } from './ScoreManager';
 import { useI18n } from '../i18n';
+import { getKeyDisplayName } from './KeyBindingSettings';
+import { loadKeyBindingsFor } from './keyLayouts';
 
 // ============ Types ============
 
@@ -369,17 +371,27 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
   const [showSpeedInfo, setShowSpeedInfo] = useState(false);
   const speedInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // The loader's key mode wins; otherwise detect it from the notechart
+  const keyMode = useMemo(
+    () => options.keyMode || keyModeProp || notechart?.getKeyMode?.('SC') || '7K',
+    [options.keyMode, keyModeProp, notechart],
+  );
+
   const { state, actions, canvasProps } = useGamePlayer(notechart, keysoundPlayer, {
     ...options,
+    keyMode,
     hiSpeed: currentHiSpeed,
   });
 
   // Compute lane config based on playSide
-  const laneConfig = useMemo(() => {
-    // The loader's key mode wins; otherwise detect it from the notechart
-    const keyMode = keyModeProp || notechart?.getKeyMode?.('SC') || '7K';
-    return getLaneConfigForSide(keyMode, playSide);
-  }, [keyModeProp, notechart, playSide]);
+  const laneConfig = useMemo(() => getLaneConfigForSide(keyMode, playSide), [keyMode, playSide]);
+
+  // Keys of the lanes, left to right, for the ready screen (2P uses its own fixed map)
+  const laneKeys = useMemo(() => {
+    if (playSide === '2P') return [];
+    const bindings = options.keyBindings ?? loadKeyBindingsFor(keyMode);
+    return laneConfig.map((lane) => ({ column: lane.column, key: bindings[lane.column] }));
+  }, [playSide, options.keyBindings, keyMode, laneConfig]);
 
   // Calculate green number (visible time in ms) from current BPM and hi-speed
   // Green Number = (visible_beats / (BPM / 60)) * 1000 / hiSpeed
@@ -507,11 +519,13 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
     };
   }, [state.isPlaying, state.isReady]);
 
-  // Keyboard events (ESC: pause, Space: start, F11: fullscreen, arrows: speed)
+  // Keyboard events (ESC: pause / resume, Space: start, F11: fullscreen, arrows: speed)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Escape') {
-        if (state.isPlaying && !state.isPaused) {
+        if (state.isPaused) {
+          actions.resume();
+        } else if (state.isPlaying) {
           actions.pause();
         }
       }
@@ -792,6 +806,31 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
           <div style={{ marginTop: 6, fontSize: 11, color: '#555' }}>
             {t('screens.ready.keyHint')}
           </div>
+          {/* Keys of this key mode's lanes, left to right */}
+          {laneKeys.length > 0 && (
+            <div
+              data-testid="lane-keys"
+              style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4, maxWidth: '90%' }}
+            >
+              {laneKeys.map(({ column, key }) => (
+                <span
+                  key={column}
+                  style={{
+                    minWidth: 22,
+                    padding: '3px 5px',
+                    border: '1px solid #444',
+                    borderRadius: 4,
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    textAlign: 'center',
+                    color: key ? '#ccc' : '#555',
+                  }}
+                >
+                  {key ? getKeyDisplayName(key) : '-'}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

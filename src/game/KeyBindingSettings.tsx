@@ -49,8 +49,8 @@ function getLaneInfoForKeyMode(keyMode?: number): LaneInfo[] {
   }
 }
 
-// Converts a key code to a user-friendly name
-function getKeyDisplayName(code: string): string {
+/** Converts a key code to a user-friendly name. */
+export function getKeyDisplayName(code: string): string {
   const keyNames: Record<string, string> = {
     'ShiftLeft': 'L-Shift',
     'ShiftRight': 'R-Shift',

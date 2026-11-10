@@ -84,6 +84,8 @@ export {
     loadKeyBindings,
     saveKeyBindings,
     bindingsToKeyMap,
+    loadKeyBindingsFor,
+    saveKeyBindingsFor,
 } from './game';
 
 export type {

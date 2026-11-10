@@ -11,13 +11,14 @@ import * as THREE from 'three';
 
 import type { GameNote } from '../../audio/judgements';
 import type { KeyColumn } from '../InputHandler';
-import { JUDGMENT_LINE_Y } from './LaneLayer';
+import { JUDGMENT_LINE_Y, MIN_VISIBLE_POSITIONS } from './LaneLayer';
 import type { LaneConfig } from './laneConfig';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
 const NOTE_HEIGHT = 8;
-const VISIBLE_BEATS = 8;
+const MAX_VISIBLE_BAR_LINES = 64;
+const BAR_LINE_COLOR = 0x555577;
 const MAX_VISIBLE_NOTES = 1000;
 const MAX_VISIBLE_LANDMINES = 200;
 const MAX_VISIBLE_LONG_NOTES = 100;
@@ -38,7 +39,9 @@ export const NotesRenderer: React.FC<{
   lanePositions: Map<KeyColumn, { x: number; width: number }>;
   laneColorMap: Map<KeyColumn, number>;
   noteScale: number;
-}> = React.memo(({ notes, currentPosition, hiSpeed, judgedNoteIds, lanePositions, laneColorMap, noteScale }) => {
+  /** Positions visible above the judgment line at hi-speed 1 (see `visiblePositions`). */
+  visibleRange?: number;
+}> = React.memo(({ notes, currentPosition, hiSpeed, judgedNoteIds, lanePositions, laneColorMap, noteScale, visibleRange = MIN_VISIBLE_POSITIONS }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
 
   useEffect(() => {
@@ -53,7 +56,7 @@ export const NotesRenderer: React.FC<{
     if (!meshRef.current) return;
     const mesh = meshRef.current;
     const minPos = currentPosition - 0.5;
-    const maxPos = currentPosition + VISIBLE_BEATS / hiSpeed;
+    const maxPos = currentPosition + visibleRange / hiSpeed;
     let count = 0;
 
     for (const note of notes) {
@@ -91,6 +94,49 @@ export const NotesRenderer: React.FC<{
 });
 NotesRenderer.displayName = 'NotesRenderer';
 
+// ── Bar lines ────────────────────────────────────────────────────────────
+
+/** Measure lines across the playfield, scrolling with the notes. */
+export const BarLinesRenderer: React.FC<{
+  barLines: { position: number }[];
+  currentPosition: number;
+  hiSpeed: number;
+  totalWidth: number;
+  visibleRange?: number;
+}> = React.memo(({ barLines, currentPosition, hiSpeed, totalWidth, visibleRange = MIN_VISIBLE_POSITIONS }) => {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+
+  useFrame(() => {
+    if (!meshRef.current) return;
+    const mesh = meshRef.current;
+    const maxPos = currentPosition + visibleRange / hiSpeed;
+    let count = 0;
+
+    for (const line of barLines) {
+      if (count >= MAX_VISIBLE_BAR_LINES) break;
+      const pos = line.position;
+      if (!Number.isFinite(pos) || pos < currentPosition || pos > maxPos) continue;
+      const y = JUDGMENT_LINE_Y + (pos - currentPosition) * 100 * hiSpeed;
+      _dummy.position.set(0, y, 0.2);
+      _dummy.scale.set(totalWidth, 1, 1);
+      _dummy.updateMatrix();
+      mesh.setMatrixAt(count, _dummy.matrix);
+      count++;
+    }
+
+    mesh.count = count;
+    mesh.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined, undefined, MAX_VISIBLE_BAR_LINES]} frustumCulled={false}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial color={BAR_LINE_COLOR} />
+    </instancedMesh>
+  );
+});
+BarLinesRenderer.displayName = 'BarLinesRenderer';
+
 // ── Landmine notes ───────────────────────────────────────────────────────
 
 export const LandmineRenderer: React.FC<{
@@ -100,7 +146,8 @@ export const LandmineRenderer: React.FC<{
   triggeredMineIds: Set<number>;
   lanePositions: Map<KeyColumn, { x: number; width: number }>;
   noteScale: number;
-}> = React.memo(({ landmines, currentPosition, hiSpeed, triggeredMineIds, lanePositions, noteScale }) => {
+  visibleRange?: number;
+}> = React.memo(({ landmines, currentPosition, hiSpeed, triggeredMineIds, lanePositions, noteScale, visibleRange = MIN_VISIBLE_POSITIONS }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
 
   useEffect(() => {
@@ -115,7 +162,7 @@ export const LandmineRenderer: React.FC<{
     if (!meshRef.current) return;
     const mesh = meshRef.current;
     const minPos = currentPosition - 0.5;
-    const maxPos = currentPosition + VISIBLE_BEATS / hiSpeed;
+    const maxPos = currentPosition + visibleRange / hiSpeed;
     let count = 0;
 
     for (const mine of landmines) {
@@ -159,7 +206,8 @@ export const LongNotesRenderer: React.FC<{
   lanePositions: Map<KeyColumn, { x: number; width: number }>;
   laneConfig: LaneConfig[];
   noteScale: number;
-}> = React.memo(({ notes, currentPosition, hiSpeed, judgedNoteIds, activeHoldNoteIds, lanePositions, laneConfig, noteScale }) => {
+  visibleRange?: number;
+}> = React.memo(({ notes, currentPosition, hiSpeed, judgedNoteIds, activeHoldNoteIds, lanePositions, laneConfig, noteScale, visibleRange = MIN_VISIBLE_POSITIONS }) => {
   const headTailRef = useRef<THREE.InstancedMesh>(null);
   const bodyRef = useRef<THREE.InstancedMesh>(null);
 
@@ -178,7 +226,7 @@ export const LongNotesRenderer: React.FC<{
     const headTailMesh = headTailRef.current;
     const bodyMesh = bodyRef.current;
     const minPos = currentPosition - 0.5;
-    const maxPos = currentPosition + VISIBLE_BEATS / hiSpeed + 10;
+    const maxPos = currentPosition + visibleRange / hiSpeed + 10;
     let headTailCount = 0;
     let bodyCount = 0;
 

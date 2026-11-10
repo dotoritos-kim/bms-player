@@ -104,3 +104,4 @@ export {
   bindingsToKeyMap,
 } from './KeyBindingSettings';
 export type { KeyBindings, KeyBindingSettingsProps } from './KeyBindingSettings';
+export { loadKeyBindingsFor, saveKeyBindingsFor } from './keyLayouts';
