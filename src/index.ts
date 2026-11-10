@@ -86,6 +86,8 @@ export {
     bindingsToKeyMap,
     loadKeyBindingsFor,
     saveKeyBindingsFor,
+    defaultKeyBindingsFor,
+    getKeyDisplayName,
 } from './game';
 
 export type {

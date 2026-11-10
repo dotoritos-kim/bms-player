@@ -51,6 +51,15 @@ export const defaultMessages = {
       pressToStart: 'Press SPACE or click to start',
       keyHint: '↑↓ Hi-Speed ±0.25 | PgUp/PgDn ±1.0 | ` Floating',
     },
+    keys: {
+      open: 'Key Settings',
+      title: 'Key Settings',
+      help: 'Click a lane, then press its key. A key already in use swaps lanes.',
+      listening: 'Press...',
+      reset: 'Reset',
+      cancel: 'Cancel',
+      save: 'Save',
+    },
     pause: {
       title: 'PAUSED',
       resume: 'RESUME',

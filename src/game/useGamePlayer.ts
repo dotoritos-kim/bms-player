@@ -232,6 +232,13 @@ export function useGamePlayer(
     };
   }, [notechart, keysoundPlayer, options.playSide, options.keyMode]);
 
+  // Bindings changed on the ready screen (key settings) reach the live handler
+  // without tearing the game down.
+  useEffect(() => {
+    if (!inputHandlerRef.current || (optionsRef.current.playSide ?? 'DP') === '2P') return;
+    inputHandlerRef.current.setKeyMap(bindingsToKeyMap(options.keyBindings ?? loadKeyBindingsFor(options.keyMode)));
+  }, [options.keyBindings, options.keyMode]);
+
   // The loop reports state every few ms (the worker ticks at 200 Hz) but the
   // screen shows one frame at a time: keep only the newest playing state and
   // hand it to React once per animation frame. Rendering every report cost

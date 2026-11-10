@@ -2,7 +2,7 @@
  * Every lane of every key mode needs a key. The saved bindings only name SC
  * and keys 1-7, so 9K, 10K, 14K and the wide modes had lanes no key reached.
  */
-import { loadKeyBindingsFor, saveKeyBindingsFor } from '../src/game/keyLayouts';
+import { defaultKeyBindingsFor, loadKeyBindingsFor, saveKeyBindingsFor } from '../src/game/keyLayouts';
 import { bindingsToKeyMap } from '../src/game/KeyBindingSettings';
 import { LANE_CONFIG_MAP } from '../src/game/canvas/laneConfig';
 
@@ -48,5 +48,23 @@ describe('loadKeyBindingsFor', () => {
     expect(loadKeyBindingsFor('14K')['1']).toBe('KeyZ');
     saveKeyBindingsFor('14K', { ...loadKeyBindingsFor('14K'), '1': 'KeyQ' });
     expect(loadKeyBindingsFor('7K+SC DP')['1']).toBe('KeyQ');
+  });
+
+  it('saveKeyBindingsFor writes single-side modes to the shared bindings', () => {
+    saveKeyBindingsFor('5K', { SC: 'KeyA', '1': 'KeyQ' });
+    expect(JSON.parse(store.get('bms_key_bindings')!)).toEqual({ SC: 'KeyA', '1': 'KeyQ' });
+    expect(loadKeyBindingsFor('7K')['1']).toBe('KeyQ');
+    expect(store.has('bms_key_bindings_5K')).toBe(false);
+  });
+
+  it('defaultKeyBindingsFor ignores what is saved (reset target)', () => {
+    saveKeyBindingsFor('9K', { '1': 'KeyQ' });
+    saveKeyBindingsFor('7K', { '1': 'KeyQ' });
+    expect(defaultKeyBindingsFor('9K')['1']).toBe('KeyA');
+    expect(defaultKeyBindingsFor('7K')).toMatchObject({ SC: 'ShiftLeft', '1': 'KeyS', '4': 'Space', '7': 'KeyL' });
+  });
+
+  it('a lane without a key is left out of the key map', () => {
+    expect(bindingsToKeyMap({ '1': 'KeyA', '2': '' })).toEqual({ KeyA: '1' });
   });
 });

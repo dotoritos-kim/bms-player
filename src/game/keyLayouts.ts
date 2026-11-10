@@ -7,10 +7,59 @@
  * notes could only be missed. Every mode gets a key for each lane here.
  */
 
-import { loadKeyBindings, type KeyBindings } from './KeyBindingSettings';
+import { DEFAULT_KEY_MAP, type KeyColumn } from './InputHandler';
 import { LANE_CONFIG_MAP } from './canvas/laneConfig';
 
+export interface KeyBindings {
+  [column: string]: string; // column -> keyCode
+}
+
+const STORAGE_KEY = 'bms_key_bindings';
 const STORAGE_PREFIX = 'bms_key_bindings_';
+
+/** Converts DEFAULT_KEY_MAP into the bindings format */
+function invertKeyMap(keyMap: Record<string, KeyColumn>): KeyBindings {
+  const bindings: KeyBindings = {};
+  for (const [keyCode, column] of Object.entries(keyMap)) {
+    // When multiple keys map to the same column, use only the first one
+    if (!bindings[column]) {
+      bindings[column] = keyCode;
+    }
+  }
+  return bindings;
+}
+
+/** Loads saved key bindings */
+export function loadKeyBindings(): KeyBindings {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch {
+    // Ignore
+  }
+  // Return defaults (converts keyCode -> column into column -> keyCode)
+  return invertKeyMap(DEFAULT_KEY_MAP);
+}
+
+/** Saves key bindings */
+export function saveKeyBindings(bindings: KeyBindings): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(bindings));
+  } catch {
+    // Ignore
+  }
+}
+
+/** Converts key bindings into a keyMap for InputHandler */
+export function bindingsToKeyMap(bindings: KeyBindings): Record<string, KeyColumn> {
+  const keyMap: Record<string, KeyColumn> = {};
+  for (const [column, keyCode] of Object.entries(bindings)) {
+    if (keyCode) keyMap[keyCode] = column;
+  }
+  return keyMap;
+}
 
 /** Lanes covered by the single-side bindings the settings dialog edits. */
 const SINGLE_SIDE_COLUMNS = new Set(['SC', '1', '2', '3', '4', '5', '6', '7']);
@@ -51,7 +100,7 @@ const MODE_DEFAULTS: Record<string, KeyBindings> = {
 MODE_DEFAULTS['48K+4SC'] = { ...MODE_DEFAULTS['48K'], SC: 'ShiftLeft', SC2: 'ShiftRight' };
 
 /** '7K+SC' / '7K+SC DP' style names → the lane-config names used here. */
-function normalizeKeyMode(keyMode: string | undefined): string {
+export function normalizeKeyMode(keyMode: string | undefined): string {
   if (!keyMode) return '7K';
   if (keyMode === '7K+SC DP') return '14K';
   if (keyMode === '5K+SC DP') return '10K';
@@ -81,13 +130,24 @@ export function loadKeyBindingsFor(keyMode: string | undefined): KeyBindings {
   } catch {
     // Unreadable storage: fall through to the defaults.
   }
-  return { ...(MODE_DEFAULTS[mode] ?? loadKeyBindings()) };
+  return defaultKeyBindingsFor(mode);
 }
 
-/** Saves the bindings of a mode that does not use the single-side bindings. */
-export function saveKeyBindingsFor(keyMode: string, bindings: KeyBindings): void {
+/** The layout a mode starts with (what "reset" goes back to). */
+export function defaultKeyBindingsFor(keyMode: string | undefined): KeyBindings {
+  const mode = normalizeKeyMode(keyMode);
+  return { ...(MODE_DEFAULTS[mode] ?? invertKeyMap(DEFAULT_KEY_MAP)) };
+}
+
+/** Saves the bindings where `loadKeyBindingsFor` reads them for this mode. */
+export function saveKeyBindingsFor(keyMode: string | undefined, bindings: KeyBindings): void {
+  const mode = normalizeKeyMode(keyMode);
+  if (isSingleSideMode(mode)) {
+    saveKeyBindings(bindings);
+    return;
+  }
   try {
-    localStorage.setItem(STORAGE_PREFIX + normalizeKeyMode(keyMode), JSON.stringify(bindings));
+    localStorage.setItem(STORAGE_PREFIX + mode, JSON.stringify(bindings));
   } catch {
     // Ignore
   }

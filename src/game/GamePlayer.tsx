@@ -12,8 +12,8 @@ import { JudgmentEngine } from './JudgmentEngine';
 import { GaugeSystem, type GaugeType, getGaugeClearTarget } from './GaugeSystem';
 import type { ScoreState } from './ScoreManager';
 import { useI18n } from '../i18n';
-import { getKeyDisplayName } from './KeyBindingSettings';
-import { loadKeyBindingsFor } from './keyLayouts';
+import { KeyBindingSettings, getKeyDisplayName } from './KeyBindingSettings';
+import { loadKeyBindingsFor, type KeyBindings } from './keyLayouts';
 
 // ============ Types ============
 
@@ -377,9 +377,17 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
     [options.keyMode, keyModeProp, notechart],
   );
 
+  // Key settings dialog (ready screen). A host that passes `options.keyBindings`
+  // owns the bindings, so the dialog is offered only when it does not.
+  const [keySettingsOpen, setKeySettingsOpen] = useState(false);
+  const [savedKeyBindings, setSavedKeyBindings] = useState<KeyBindings | null>(null);
+  useEffect(() => { setSavedKeyBindings(null); }, [keyMode]);
+  const keyBindings = options.keyBindings ?? savedKeyBindings ?? undefined;
+
   const { state, actions, canvasProps } = useGamePlayer(notechart, keysoundPlayer, {
     ...options,
     keyMode,
+    keyBindings,
     hiSpeed: currentHiSpeed,
   });
 
@@ -389,9 +397,9 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
   // Keys of the lanes, left to right, for the ready screen (2P uses its own fixed map)
   const laneKeys = useMemo(() => {
     if (playSide === '2P') return [];
-    const bindings = options.keyBindings ?? loadKeyBindingsFor(keyMode);
+    const bindings = keyBindings ?? loadKeyBindingsFor(keyMode);
     return laneConfig.map((lane) => ({ column: lane.column, key: bindings[lane.column] }));
-  }, [playSide, options.keyBindings, keyMode, laneConfig]);
+  }, [playSide, keyBindings, keyMode, laneConfig]);
 
   // Calculate green number (visible time in ms) from current BPM and hi-speed
   // Green Number = (visible_beats / (BPM / 60)) * 1000 / hiSpeed
@@ -522,6 +530,8 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
   // Keyboard events (ESC: pause / resume, Space: start, F11: fullscreen, arrows: speed)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // The key settings dialog owns the keyboard while it is open.
+      if (keySettingsOpen) return;
       if (e.code === 'Escape') {
         if (state.isPaused) {
           actions.resume();
@@ -599,7 +609,7 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [state.isPlaying, state.isPaused, state.isReady, showResult, actions, toggleFullscreen, currentBpm, baseBpm, flashSpeedInfo]);
+  }, [state.isPlaying, state.isPaused, state.isReady, showResult, actions, toggleFullscreen, currentBpm, baseBpm, flashSpeedInfo, keySettingsOpen]);
 
   // Exit handler
   const handleExit = useCallback(() => {
@@ -831,8 +841,36 @@ export const GamePlayer: React.FC<GamePlayerProps> = ({
               ))}
             </div>
           )}
+          {laneKeys.length > 0 && !options.keyBindings && (
+            <button
+              data-testid="open-key-settings"
+              onClick={() => setKeySettingsOpen(true)}
+              style={{
+                marginTop: 10,
+                padding: '5px 14px',
+                fontSize: 12,
+                background: 'transparent',
+                color: '#aaa',
+                border: '1px solid #555',
+                borderRadius: 4,
+                cursor: 'pointer',
+              }}
+            >
+              {t('screens.keys.open')}
+            </button>
+          )}
         </div>
       )}
+
+      {/* Key settings (opened from the ready screen) */}
+      <KeyBindingSettings
+        hideTrigger
+        open={keySettingsOpen}
+        onOpenChange={setKeySettingsOpen}
+        keyMode={keyMode}
+        bindings={savedKeyBindings ?? undefined}
+        onChange={setSavedKeyBindings}
+      />
 
       {/* Pause screen */}
       {state.isPaused && (
