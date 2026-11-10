@@ -15,6 +15,9 @@
  *   scheduled time skips the elapsed part instead of starting late.
  * - Peak limiter instead of hard clipping when many voices overlap.
  * - Short fade on stop to avoid clicks.
+ * - 'pauseAll' / 'resumeAll': every voice (sounding or still scheduled) is
+ *   frozen where it is and continues from there, so a paused game keeps its
+ *   long BGM samples instead of losing them to 'stopAll'.
  */
 
 // The AudioWorklet code, defined as a string.
@@ -38,6 +41,9 @@ class AudioProcessor extends AudioWorkletProcessor {
         this.playbackRate = 1.0; // Global playback rate.
         this.limiterGain = 1.0;
         this.limiterRelease = 1 - Math.exp(-1 / (LIMIT_RELEASE_SEC * sampleRate));
+        // Pause: voices stop advancing once pauseGain has faded to 0.
+        this.paused = false;
+        this.pauseGain = 1.0;
 
         this.port.onmessage = (e) => this.handleMessage(e.data);
     }
@@ -68,12 +74,28 @@ class AudioProcessor extends AudioWorkletProcessor {
 
             case 'stop': {
                 const track = this.tracks.get(key);
-                if (track) this.fadeOut(key, track);
+                if (!track) break;
+                // Frozen voices are silent and would never run their fade.
+                if (this.isFrozen()) this.removeTrack(key);
+                else this.fadeOut(key, track);
                 break;
             }
 
             case 'stopAll':
-                for (const [k, track] of this.tracks) this.fadeOut(k, track);
+                if (this.isFrozen()) {
+                    this.tracks.clear();
+                    this.groups.clear();
+                } else {
+                    for (const [k, track] of this.tracks) this.fadeOut(k, track);
+                }
+                break;
+
+            case 'pauseAll':
+                this.paused = true;
+                break;
+
+            case 'resumeAll':
+                this.paused = false;
                 break;
 
             case 'clear':
@@ -105,6 +127,10 @@ class AudioProcessor extends AudioWorkletProcessor {
                 }
                 break;
         }
+    }
+
+    isFrozen() {
+        return this.paused && this.pauseGain <= 0;
     }
 
     startTrack(key, data) {
@@ -200,6 +226,9 @@ class AudioProcessor extends AudioWorkletProcessor {
         left.fill(0);
         if (stereoOut) right.fill(0);
 
+        // Paused and faded out: keep every voice (and its scheduled delay) as it is.
+        if (this.isFrozen()) return true;
+
         for (const [trackKey, track] of this.tracks) {
             let i = 0;
             if (track.delaySamples > 0) {
@@ -277,6 +306,19 @@ class AudioProcessor extends AudioWorkletProcessor {
             if (stereoOut) right[i] = Math.max(-1, Math.min(1, r * gain));
         }
         this.limiterGain = gain;
+
+        // Fade into / out of a pause over one fade length (no click).
+        const pauseTarget = this.paused ? 0 : 1;
+        if (this.pauseGain !== pauseTarget) {
+            const step = (pauseTarget > this.pauseGain ? 1 : -1) / FADE_SAMPLES;
+            let pg = this.pauseGain;
+            for (let i = 0; i < blockSize; i++) {
+                pg = Math.max(0, Math.min(1, pg + step));
+                left[i] *= pg;
+                if (stereoOut) right[i] *= pg;
+            }
+            this.pauseGain = pg;
+        }
 
         return true;
     }

@@ -225,6 +225,7 @@ export class GameLoop {
     this.firstTickDone = false;
 
     this.inputHandler.setEnabled(true);
+    this.keysoundPlayer.resumeAll?.();
     this.tick();
   }
 
@@ -240,7 +241,10 @@ export class GameLoop {
     this.pauseTime = this.getCurrentTime();
     this.inputHandler.setEnabled(false);
     cancelAnimationFrame(this.animationFrameId);
-    this.keysoundPlayer.stopAll();
+    // Freeze the audio where it is (long BGM samples continue on resume);
+    // players without pauseAll can only be cut.
+    if (this.keysoundPlayer.pauseAll) this.keysoundPlayer.pauseAll();
+    else this.keysoundPlayer.stopAll();
     // The rAF loop is stopped, so push the paused state explicitly —
     // otherwise React consumers never see `isPaused` and the pause menu
     // cannot appear.
@@ -259,6 +263,7 @@ export class GameLoop {
     this.contextStartTime += pauseDuration / 1000;
 
     this.inputHandler.setEnabled(true);
+    this.keysoundPlayer.resumeAll?.();
     this.callbacks.onUpdate?.(this.getState());
     this.tick();
   }
@@ -270,6 +275,8 @@ export class GameLoop {
     cancelAnimationFrame(this.animationFrameId);
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
+    // Stopped from the pause menu: do not leave the player frozen.
+    this.keysoundPlayer.resumeAll?.();
     this.clearAutoplayTimers();
     if (wasActive) this.callbacks.onUpdate?.(this.getState());
   }

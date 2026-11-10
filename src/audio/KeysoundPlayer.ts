@@ -352,6 +352,14 @@ export class KeysoundPlayer {
     this._preloader.stopAllAudio();
   }
 
+  pauseAll(): void {
+    this._preloader?.pauseAllAudio();
+  }
+
+  resumeAll(): void {
+    this._preloader?.resumeAllAudio();
+  }
+
   setVolume(volume: number): void {
     this.options.volume = Math.max(0, Math.min(1, volume));
     if (this._preloader && this._isReady) {

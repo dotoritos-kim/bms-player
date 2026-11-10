@@ -194,6 +194,15 @@ export class WorkletPlayback {
         if (this.audioWorkletNode) this._post({ type: 'stopAll', key: '', data: null });
     }
 
+    /** Freezes every voice (sounding or scheduled) until resumeAllAudio(). */
+    pauseAllAudio(): void {
+        if (this.audioWorkletNode) this._post({ type: 'pauseAll', key: '', data: null });
+    }
+
+    resumeAllAudio(): void {
+        if (this.audioWorkletNode) this._post({ type: 'resumeAll', key: '', data: null });
+    }
+
     clearAudio(trackId: string): void {
         if (this.audioWorkletNode) this._post({ type: 'clear', key: trackId, data: null });
     }

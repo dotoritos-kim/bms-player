@@ -135,4 +135,52 @@ describe('AudioProcessor worklet', () => {
         render(p);
         expect(p.tracks.size).toBe(0);
     });
+
+    it('pauseAll freezes a sounding voice and resumeAll continues it from the same sample', () => {
+        const ramp = new Float32Array(4000);
+        for (let i = 0; i < ramp.length; i++) ramp[i] = i / 10000;
+        p.handleMessage({ type: 'register', key: '01', data: { bufferLeft: ramp } });
+        p.handleMessage({ type: 'play', key: 'a', data: { bufferKey: '01', loop: false } });
+        render(p, 2, scope); // samples 0..255
+        p.handleMessage({ type: 'pauseAll', key: '' });
+        const [fade] = render(p, 1, scope); // fades out over this block (256..383)
+        expect(Math.abs(fade[127])).toBe(0);
+        const silent = render(p, 20, scope); // a long pause
+        for (const b of silent) expect(Math.max(...b.map(Math.abs))).toBe(0);
+        expect(p.tracks.size).toBe(1);
+        p.handleMessage({ type: 'resumeAll', key: '' });
+        render(p, 1, scope); // fades back in (384..511)
+        const [block] = render(p, 1, scope);
+        expect(block[0]).toBeCloseTo(512 / 10000, 5); // not restarted, not skipped ahead
+    });
+
+    it('keeps the remaining delay of a scheduled voice across a pause', () => {
+        p.handleMessage({ type: 'register', key: '01', data: { bufferLeft: constant(0.4, 4000) } });
+        p.handleMessage({
+            type: 'play', key: 'a',
+            data: { bufferKey: '01', loop: false, scheduledTime: scope.currentTime + 0.2 }, // 200 samples ahead
+        });
+        p.handleMessage({ type: 'pauseAll', key: '' });
+        render(p, 1, scope); // fade-out block still counts 128 samples of the delay
+        render(p, 30, scope); // paused far past the scheduled time
+        p.handleMessage({ type: 'resumeAll', key: '' });
+        const [block] = render(p, 1, scope);
+        expect(block[71]).toBe(0);
+        expect(block[72]).toBeGreaterThan(0); // 200 - 128 samples after the resume
+        const [next] = render(p, 1, scope);
+        expect(next[0]).toBeCloseTo(0.4, 5);
+    });
+
+    it('stopAll while paused drops the frozen voices (nothing sounds after resume)', () => {
+        p.handleMessage({ type: 'register', key: '01', data: { bufferLeft: constant(0.5, 4000) } });
+        p.handleMessage({ type: 'play', key: 'a', data: { bufferKey: '01', loop: false } });
+        render(p, 1, scope);
+        p.handleMessage({ type: 'pauseAll', key: '' });
+        render(p, 2, scope);
+        p.handleMessage({ type: 'stopAll', key: '' });
+        expect(p.tracks.size).toBe(0);
+        p.handleMessage({ type: 'resumeAll', key: '' });
+        const blocks = render(p, 2, scope);
+        for (const b of blocks) expect(Math.max(...b.map(Math.abs))).toBe(0);
+    });
 });

@@ -210,6 +210,8 @@ export class AudioPreloader {
 
     public stopAudio(trackId: string): void { this.playback.stopAudio(trackId); }
     public stopAllAudio(): void { this.playback.stopAllAudio(); }
+    public pauseAllAudio(): void { this.playback.pauseAllAudio(); }
+    public resumeAllAudio(): void { this.playback.resumeAllAudio(); }
     public clearAudio(trackId: string): void { this.playback.clearAudio(trackId); }
     public clearAllAudio(): void { this.playback.clearAllAudio(); }
     public setMasterVolume(volume: number): void { this.playback.setMasterVolume(volume); }

@@ -176,6 +176,7 @@ export class WorkerGameLoop {
     this.firstTickDone = false;
 
     this.inputHandler.setEnabled(true);
+    this.keysoundPlayer.resumeAll?.();
     this.postToWorker({ type: 'start' });
   }
 
@@ -187,7 +188,10 @@ export class WorkerGameLoop {
     this._phase = PHASE_PAUSED;
     this.pauseTime = this.getCurrentTime();
     this.inputHandler.setEnabled(false);
-    this.keysoundPlayer.stopAll();
+    // Freeze the audio where it is (long BGM samples continue on resume);
+    // players without pauseAll can only be cut.
+    if (this.keysoundPlayer.pauseAll) this.keysoundPlayer.pauseAll();
+    else this.keysoundPlayer.stopAll();
     this.postToWorker({ type: 'pause' });
     this.emitPhaseState();
   }
@@ -199,6 +203,7 @@ export class WorkerGameLoop {
       (this.contextStartTime * 1000 + this.pauseTime);
     this.contextStartTime += pauseDuration / 1000;
     this.inputHandler.setEnabled(true);
+    this.keysoundPlayer.resumeAll?.();
     this.postToWorker({ type: 'resume' });
     this.emitPhaseState();
   }
@@ -208,6 +213,8 @@ export class WorkerGameLoop {
     this._phase = PHASE_READY;
     this.inputHandler.setEnabled(false);
     this.keysoundPlayer.stopAll();
+    // Stopped from the pause menu: do not leave the player frozen.
+    this.keysoundPlayer.resumeAll?.();
     this.clearAutoplayTimers();
     this.postToWorker({ type: 'stop' });
     if (wasActive) this.emitPhaseState();

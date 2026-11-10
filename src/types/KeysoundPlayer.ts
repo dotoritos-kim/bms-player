@@ -14,6 +14,14 @@ export interface KeysoundPlayer {
   play(keysoundId: string, offset?: number, scheduledTime?: number, volume?: number): void;
   /** Stop all currently playing keysounds */
   stopAll(): void;
+  /**
+   * Freeze every keysound (sounding or scheduled) where it is; `resumeAll()`
+   * continues them. The game loops use this for pause so long BGM samples
+   * survive it. Optional: without it a pause falls back to `stopAll()`.
+   */
+  pauseAll?(): void;
+  /** Continue the keysounds frozen by `pauseAll()` (no-op when not paused). */
+  resumeAll?(): void;
   /** Release all resources */
   dispose(): void;
   /**

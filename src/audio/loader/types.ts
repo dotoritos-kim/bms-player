@@ -86,6 +86,8 @@ export type AudioProcessorMessageType =
     | 'play'
     | 'stop'
     | 'stopAll'
+    | 'pauseAll'
+    | 'resumeAll'
     | 'clear'
     | 'clearAll'
     | 'setVolume'
@@ -102,7 +104,7 @@ export interface AudioProcessorPostMessage {
     type: AudioProcessorMessageType;
     key: string;
     data?:
-        | null // 'stop' | 'clear' | 'stopAll' | 'clearAll'
+        | null // 'stop' | 'clear' | 'stopAll' | 'clearAll' | 'pauseAll' | 'resumeAll'
         | number // 'setVolume' | 'adjustVolume'
         | StereoPlayData
         | MonoPlayData
